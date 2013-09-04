@@ -84,30 +84,30 @@ public class DynamoManagerTest {
         // modify the session attributes
         session.getSession().setAttribute("FOO", "BAZ");
         // attribute has changed
-        assertTrue(this.manager.haveAttributesChanged(originalAttributes, session));
+        assertTrue(this.manager.haveAttributesChanged(session));
 
         // Get another instance of session and add new attribute
         session = setUpSession(originalAttributes);
         session.getSession().setAttribute("FOO3", "QUX");
         // attributes have changed
-        assertTrue(this.manager.haveAttributesChanged(originalAttributes, session));
+        assertTrue(this.manager.haveAttributesChanged(session));
 
         // Get another instance of session and remove attribute
         session = setUpSession(originalAttributes);
         session.getSession().removeAttribute("FOO2");
         // attributes have changed
-        assertTrue(this.manager.haveAttributesChanged(originalAttributes, session));
+        assertTrue(this.manager.haveAttributesChanged(session));
 
         // Get a new instance of this session and do not modify it
         session = setUpSession(originalAttributes);
         // attribute has not changed
-        assertFalse(this.manager.haveAttributesChanged(originalAttributes, session));
+        assertFalse(this.manager.haveAttributesChanged(session));
 
         // Get a new instance of this session and set the same attrib
         session = setUpSession(originalAttributes);
         session.getSession().setAttribute("FOO", "BAR");
         // attribute has not changed
-        assertFalse(this.manager.haveAttributesChanged(originalAttributes, session));
+        assertFalse(this.manager.haveAttributesChanged(session));
     }
 
 
@@ -116,6 +116,7 @@ public class DynamoManagerTest {
         for (Map.Entry<String, Object> entry : attributes.entrySet()) {
             originalSession.getSession().setAttribute(entry.getKey(), entry.getValue());
         }
+        this.manager.setCurrentSession(originalSession);
         return originalSession;
     }
 }

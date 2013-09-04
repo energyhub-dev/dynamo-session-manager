@@ -62,7 +62,10 @@ public class DynamoManager implements Manager, Lifecycle {
     protected DynamoTableRotator rotator;
     private DynamoSessionTrackerValve trackerValve;
     private ThreadLocal<StandardSession> currentSession = new ThreadLocal<StandardSession>();
-    private ThreadLocal<Map> originalAttributes = new ThreadLocal<Map>();
+
+    // maintain hash of attributes on load so we can compare against a
+    // hash when deciding to update in dynamo
+    private int originalAttributeHash = 0;
     private Serializer serializer;
     private StatsdClient statsdClient = null;
 
@@ -462,7 +465,6 @@ public class DynamoManager implements Manager, Lifecycle {
                 return session;
             } else {
                 currentSession.remove();
-                originalAttributes.remove();
             }
         }
 
@@ -580,17 +582,28 @@ public class DynamoManager implements Manager, Lifecycle {
         }
     }
 
+    private int hashSession(StandardSession session) {
+        int prime = 31;
+        int hash = 0;
+        List<Object> attrs = Collections.list(session.getAttributeNames());
+        List<String> attrNames = new ArrayList<String>();
+        for (Object name : attrs) {
+            attrNames.add(name.toString());
+        }
+        Collections.sort(attrNames);
+        for (String name : attrNames) {
+            hash = prime * hash + session.getAttribute(name).hashCode();
+        }
+        return hash;
+    }
+
     /**
      * Store the session and attributes at create or load time, for comparison later on.
      * @param session
      */
     protected void setCurrentSession(StandardSession session) {
         currentSession.set(session);
-        Map attributeClone = new HashMap();
-        for (Object name : Collections.list(session.getAttributeNames())) {
-            attributeClone.put(name, session.getAttribute(name.toString()));
-        }
-        originalAttributes.set(attributeClone);
+        originalAttributeHash = hashSession(session);
     }
 
     public void save(Session session) throws IOException {
@@ -603,7 +616,6 @@ public class DynamoManager implements Manager, Lifecycle {
             }
 
             DynamoSession dynamoSession = (DynamoSession) session;
-            boolean attributesHaveChanged = haveAttributesChanged(originalAttributes.get(), dynamoSession);
 
             ByteBuffer data = serializer.serializeFrom(dynamoSession);
             Map<String, AttributeValue> dbData = new HashMap<String, AttributeValue>();
@@ -632,7 +644,7 @@ public class DynamoManager implements Manager, Lifecycle {
             throw e;
         } finally {
             currentSession.remove();
-            originalAttributes.remove();
+            originalAttributeHash = 0;
             log.fine("Session removed from ThreadLocal :" + session.getIdInternal());
         }
     }
@@ -671,7 +683,7 @@ public class DynamoManager implements Manager, Lifecycle {
 
         Map<String, AttributeValueUpdate> dbData = new HashMap<String, AttributeValueUpdate>();
         // Only set the session data if attributes have changed.
-        boolean attributesHaveChanged = haveAttributesChanged(originalAttributes.get(), session);
+        boolean attributesHaveChanged = haveAttributesChanged(session);
         if (attributesHaveChanged) {
             if (log.isLoggable(Level.FINE)) {
                 log.fine("Attributes have changed, saving session data for " + session.getIdInternal());
@@ -704,36 +716,11 @@ public class DynamoManager implements Manager, Lifecycle {
      * @param session
      * @return
      */
-    protected boolean haveAttributesChanged(Map originalAttributes, StandardSession session) {
-        if (originalAttributes == null) {
-            return true;
-        }
-
-        List newNames = Collections.list(session.getAttributeNames());
-
-        if (originalAttributes.size() != newNames.size()) {
-            return true;
-        }
-
-
+    protected boolean haveAttributesChanged(StandardSession session) {
         if (logSessionContents && log.isLoggable(Level.FINE)) {
             log.fine("Session Contents [" + session.getId() + "]:");
         }
-        for (Object obj : newNames) {
-            String name = obj.toString();
-            if (logSessionContents && log.isLoggable(Level.FINE)) {
-                log.fine("  " + name + " : " + session.getAttribute(name));
-            }
-            Object originalValue = originalAttributes.get(name);
-            Object value = session.getAttribute(name);
-            if (value != null && originalValue == null) {
-                return true;
-            }
-            if (value != null && !value.equals(originalValue)) {
-                return true;
-            }
-        }
-        return false;
+        return hashSession(session) != originalAttributeHash;
     }
 
     @Override
@@ -753,7 +740,7 @@ public class DynamoManager implements Manager, Lifecycle {
             log.log(Level.SEVERE, "Error removing session in Dynamo Session Store", e);
         } finally {
             currentSession.remove();
-            originalAttributes.remove();
+            originalAttributeHash = 0;
         }
     }
 
