@@ -50,7 +50,7 @@ public class DynamoManagerTest {
         Session session = this.manager.createSession();
         log.info("Created session:" + session.getId() + "; access = " + session.getLastAccessedTime());
 
-        this.manager.save(session);
+        this.manager.save((DynamoSession)session);
         log.info("Saved session:" + session.getId() + "; access = " + session.getLastAccessedTime());
         String id = session.getId();
 
@@ -63,7 +63,7 @@ public class DynamoManagerTest {
         long lastAccessed = session.getLastAccessedTime();
 
         // Now save again and verify that the last accessed time has changed
-        this.manager.save(session);
+        this.manager.save((DynamoSession)session);
         log.info("Saved session (again):" + session.getId());
         session = this.manager.loadSession(id);
         log.info("Loaded session (again):" + session.getId() + "; access = " + session.getLastAccessedTime());
@@ -84,30 +84,30 @@ public class DynamoManagerTest {
         // modify the session attributes
         session.getSession().setAttribute("FOO", "BAZ");
         // attribute has changed
-        assertTrue(this.manager.haveAttributesChanged(session));
+        assertTrue(this.manager.haveAttributesChanged((DynamoSession)session));
 
         // Get another instance of session and add new attribute
         session = setUpSession(originalAttributes);
         session.getSession().setAttribute("FOO3", "QUX");
         // attributes have changed
-        assertTrue(this.manager.haveAttributesChanged(session));
+        assertTrue(this.manager.haveAttributesChanged((DynamoSession)session));
 
         // Get another instance of session and remove attribute
         session = setUpSession(originalAttributes);
         session.getSession().removeAttribute("FOO2");
         // attributes have changed
-        assertTrue(this.manager.haveAttributesChanged(session));
+        assertTrue(this.manager.haveAttributesChanged((DynamoSession)session));
 
         // Get a new instance of this session and do not modify it
         session = setUpSession(originalAttributes);
         // attribute has not changed
-        assertFalse(this.manager.haveAttributesChanged(session));
+        assertFalse(this.manager.haveAttributesChanged((DynamoSession)session));
 
         // Get a new instance of this session and set the same attrib
         session = setUpSession(originalAttributes);
         session.getSession().setAttribute("FOO", "BAR");
         // attribute has not changed
-        assertFalse(this.manager.haveAttributesChanged(session));
+        assertFalse(this.manager.haveAttributesChanged((DynamoSession)session));
     }
 
 
@@ -116,7 +116,7 @@ public class DynamoManagerTest {
         for (Map.Entry<String, Object> entry : attributes.entrySet()) {
             originalSession.getSession().setAttribute(entry.getKey(), entry.getValue());
         }
-        this.manager.setCurrentSession(originalSession);
+        this.manager.setCurrentSession((DynamoSession)originalSession);
         return originalSession;
     }
 }

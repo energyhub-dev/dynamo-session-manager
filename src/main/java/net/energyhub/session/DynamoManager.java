@@ -27,8 +27,8 @@ import com.amazonaws.services.dynamodb.AmazonDynamoDBClient;
 import com.amazonaws.services.dynamodb.model.*;
 import org.apache.catalina.*;
 import org.apache.catalina.connector.Request;
-import org.apache.catalina.session.StandardSession;
 
+import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -37,8 +37,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
-public class DynamoManager implements Manager, Lifecycle {
-    private static Logger log = Logger.getLogger(DynamoManager.class.getName());
+public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener {
+    final private static Logger log = Logger.getLogger(DynamoManager.class.getName());
 
     protected static String awsAccessKey = "";  // Required for production environment
     protected static String awsSecretKey = "";  // Required for production environment
@@ -61,7 +61,7 @@ public class DynamoManager implements Manager, Lifecycle {
     protected AmazonDynamoDB dynamo;
     protected DynamoTableRotator rotator;
     private DynamoSessionTrackerValve trackerValve;
-    private ThreadLocal<StandardSession> currentSession = new ThreadLocal<StandardSession>();
+    private ThreadLocal<DynamoSession> currentSession = new ThreadLocal<DynamoSession>();
 
     // maintain hash of attributes on load so we can compare against a
     // hash when deciding to update in dynamo
@@ -252,7 +252,36 @@ public class DynamoManager implements Manager, Lifecycle {
 
     @Override
     public void setContainer(Container container) {
+        // de-register if necessary
+        if (this.container != null && this.container instanceof Context) {
+            this.container.removePropertyChangeListener(this);
+        }
         this.container = container;
+        if (this.container != null && this.container instanceof Context) {
+            int interval = ((Context)this.container).getSessionTimeout() * 60;
+            this.setMaxInactiveInterval(interval);
+            // register for relevant configs
+            this.container.addPropertyChangeListener(this);
+        }
+    }
+
+    /**
+     * Process property change events from our associated Context.
+     * @param event The property change event that has occurred
+     */
+    @Override
+    public void propertyChange(PropertyChangeEvent event) {
+        if (!(event.getSource() instanceof Context)) {
+            return;
+        }
+        // only the sessionTimeout property is relevant
+        if (event.getPropertyName().equals("sessionTimeout")) {
+            try {
+                setMaxInactiveInterval(((Integer)event.getNewValue()) * 60 );
+            } catch (NumberFormatException e) {
+                log.severe("Invalid sessionTimeout setting: " + event.getNewValue().toString());
+            }
+        }
     }
 
     @Override
@@ -366,7 +395,7 @@ public class DynamoManager implements Manager, Lifecycle {
     @Override
     public void add(Session session) {
         try {
-            save(session);
+            save((DynamoSession)session);
         } catch (IOException ex) {
             log.log(Level.SEVERE, "Error adding new session", ex);
         }
@@ -417,7 +446,7 @@ public class DynamoManager implements Manager, Lifecycle {
 
     @Override
     public org.apache.catalina.Session createSession(java.lang.String sessionId) {
-        StandardSession session = (DynamoSession) createEmptySession();
+        DynamoSession session = (DynamoSession) createEmptySession();
 
         if (sessionId != null) {
             session.setId(sessionId);
@@ -434,8 +463,7 @@ public class DynamoManager implements Manager, Lifecycle {
      */
     @Override
     public org.apache.catalina.Session[] findSessions() {
-        org.apache.catalina.Session[] sessions = new Session[]{};
-        return sessions;
+        return new Session[]{};
     }
 
     @Override
@@ -458,7 +486,7 @@ public class DynamoManager implements Manager, Lifecycle {
             return createEmptySession();
         }
 
-        StandardSession session = currentSession.get();
+        DynamoSession session = currentSession.get();
 
         if (session != null) {
             if (id.equals(session.getId())) {
@@ -468,7 +496,8 @@ public class DynamoManager implements Manager, Lifecycle {
             }
         }
 
-        String currentTable = "", previousTable = null;
+        String currentTable = "";
+        String previousTable;
 
         try {
             currentTable = rotator.getCurrentTableName();
@@ -501,8 +530,8 @@ public class DynamoManager implements Manager, Lifecycle {
             }
 
             if (result == null || result.getItem() == null) {
-                log.info("Session " + id + " not found in Dynamo");
-                StandardSession ret = (DynamoSession) createEmptySession();
+                log.info("Existing session " + id + " not found in Dynamo, so creating a new one");
+                DynamoSession ret = (DynamoSession) createEmptySession();
                 ret.setId(id);
                 setCurrentSession(ret);
                 return ret;
@@ -513,7 +542,7 @@ public class DynamoManager implements Manager, Lifecycle {
             try {
                 lastAccessed = Long.parseLong(result.getItem().get(COLUMN_LAST_ACCESSED).getN());
                 if (log.isLoggable(Level.FINE)) {
-                    log.fine("Session " + id + "lastAccessed at " + lastAccessed);
+                    log.fine("Session " + id + " lastAccessed at " + lastAccessed);
                 }
             } catch (Exception e) {
                 log.warning("Couldn't read lastAccessedTime for session " + id + ", using current time");
@@ -530,14 +559,20 @@ public class DynamoManager implements Manager, Lifecycle {
                 log.fine("Deserialized session in " + (t3-t2) + "ms");
             }
 
-            session.setMaxInactiveInterval(-1);
+            // assert active
+            if (!isActive(lastAccessed, System.currentTimeMillis(), session.getMaxInactiveInterval())) {
+                log.info("Existing session " + id + " expired, so creating a new one");
+                session.expire(); // internal processing, whatever that means
+                remove(session); // delete
+                return null; // return null if the session is inactive
+            }
+
             session.setValid(true);
             session.setNew(false);
 
             if (sessionFoundInPreviousTable) {
                 session.setNew(true); // force the session to be saved using PutItem
             }
-
 
             if (logSessionContents && log.isLoggable(Level.FINE)) {
                 log.fine("Session Contents [" + session.getId() + "]:");
@@ -546,10 +581,9 @@ public class DynamoManager implements Manager, Lifecycle {
                 }
             }
 
-            DynamoSession dynamoSession = (DynamoSession) session;
             // Set the lastAccessedTime according to the lastAccessedTime from the dynamo record,
             // since we don't save the serialized session itself if attributes haven't changed
-            dynamoSession.setLastAccessedTime(lastAccessed);
+            session.setLastAccessedTime(lastAccessed);
 
             long t1 = System.currentTimeMillis();
 
@@ -582,7 +616,16 @@ public class DynamoManager implements Manager, Lifecycle {
         }
     }
 
-    private int hashSession(StandardSession session) {
+    private boolean isActive(long lastAccessedTs, long nowTs, int maxInactiveSeconds) {
+        if (maxInactiveSeconds < 0) {
+            return true;
+        }
+        long maxInactiveMilli = maxInactiveSeconds * 1000;
+        long inactiveMilli = (nowTs - lastAccessedTs);
+        return (inactiveMilli < maxInactiveMilli);
+    }
+
+    private int hashSession(DynamoSession session) {
         int prime = 31;
         int hash = 0;
         List<Object> attrs = Collections.list(session.getAttributeNames());
@@ -599,31 +642,29 @@ public class DynamoManager implements Manager, Lifecycle {
 
     /**
      * Store the session and attributes at create or load time, for comparison later on.
-     * @param session
+     * @param session the session
      */
-    protected void setCurrentSession(StandardSession session) {
+    protected void setCurrentSession(DynamoSession session) {
         currentSession.set(session);
         originalAttributeHash = hashSession(session);
     }
 
-    public void save(Session session) throws IOException {
+    public void save(DynamoSession dynamoSession) throws IOException {
         long t0 = System.currentTimeMillis();
         try {
             String currentTable = rotator.getCurrentTableName();
 
             if (log.isLoggable(Level.FINE)) {
-                log.fine("Saving session " + session + " into Dynamo (" + currentTable + ")");
+                log.fine("Saving session " + dynamoSession.getIdInternal() + " into Dynamo (" + currentTable + ")");
             }
-
-            DynamoSession dynamoSession = (DynamoSession) session;
 
             ByteBuffer data = serializer.serializeFrom(dynamoSession);
             Map<String, AttributeValue> dbData = new HashMap<String, AttributeValue>();
             // We save lastAccessed on every access
             dbData.put(COLUMN_LAST_ACCESSED, new AttributeValue().withN(Long.toString(System.currentTimeMillis(), 10)));
 
-            double consumedCapacity = 0.0;
-            if (((DynamoSession) session).isNew()) {
+            double consumedCapacity;
+            if (dynamoSession.isNew()) {
                 consumedCapacity = putSessionInDynamo(currentTable, dynamoSession); // new session, use PutItem
             } else {
                 consumedCapacity = updateSessionInDynamo(currentTable, dynamoSession); // existing session, use UpdateItem
@@ -632,7 +673,7 @@ public class DynamoManager implements Manager, Lifecycle {
 
             long t1 = System.currentTimeMillis();
             if (log.isLoggable(Level.FINE)) {
-                log.fine("Updated session with id " + session.getIdInternal() + " in " + (t1 - t0) + "ms, "
+                log.fine("Updated session with id " + dynamoSession.getIdInternal() + " in " + (t1 - t0) + "ms, "
                         + consumedCapacity + " write units.");
             }
             if (statsdClient != null) {
@@ -645,16 +686,18 @@ public class DynamoManager implements Manager, Lifecycle {
         } finally {
             currentSession.remove();
             originalAttributeHash = 0;
-            log.fine("Session removed from ThreadLocal :" + session.getIdInternal());
+            if (log.isLoggable(Level.FINE)) {
+                log.fine("Session " + dynamoSession.getIdInternal() + " removed from ThreadLocal");
+            }
         }
     }
 
     /**
      * Put a new session into Dynamo using PutItemRequest API
-     * @param currentTable
-     * @param session
-     * @return
-     * @throws IOException
+     * @param currentTable the current Dyanmo table
+     * @param session the session
+     * @return how many units were consumed
+     * @throws IOException if something bad happens
      */
     protected double putSessionInDynamo(String currentTable, DynamoSession session) throws IOException {
         // New session, do PutItem
@@ -674,10 +717,10 @@ public class DynamoManager implements Manager, Lifecycle {
 
     /**
      * Update an existing session in Dynamo using UpdateItemRequest
-     * @param currentTable
-     * @param session
-     * @return
-     * @throws IOException
+     * @param currentTable the current Dynamo table
+     * @param session the session
+     * @return how many units were consumed
+     * @throws IOException if something bad happens
      */
     protected double updateSessionInDynamo(String currentTable, DynamoSession session) throws IOException {
 
@@ -712,11 +755,10 @@ public class DynamoManager implements Manager, Lifecycle {
     /**
      * If the original session and the current session have the same attributes (and values) then return false,
      * otherwise return true.
-     * @param originalAttributes
-     * @param session
-     * @return
+     * @param session the session to check
+     * @return whether attributes have changed
      */
-    protected boolean haveAttributesChanged(StandardSession session) {
+    protected boolean haveAttributesChanged(DynamoSession session) {
         if (logSessionContents && log.isLoggable(Level.FINE)) {
             log.fine("Session Contents [" + session.getId() + "]:");
         }
@@ -725,8 +767,10 @@ public class DynamoManager implements Manager, Lifecycle {
 
     @Override
     public void remove(Session session) {
-        log.fine("Removing session ID : " + session.getId());
-        Key key = new Key(new AttributeValue().withS(session.getId()));
+        if (log.isLoggable(Level.FINE)) {
+            log.fine("Removing session ID: " + session.getId());
+        }
+        Key key = new Key().withHashKeyElement(new AttributeValue().withS(session.getIdInternal()));
         try {
             DeleteItemRequest deleteItemRequest = new DeleteItemRequest().withTableName(rotator.getCurrentTableName()).withKey(key);
             getDynamo().deleteItem(deleteItemRequest);

@@ -32,7 +32,7 @@ import java.util.logging.Logger;
 
 
 public class DynamoSessionTrackerValve extends ValveBase {
-    private static Logger log = Logger.getLogger(DynamoSessionTrackerValve.class.getName());
+    final private static Logger log = Logger.getLogger(DynamoSessionTrackerValve.class.getName());
     private DynamoManager manager;
 
     public void setDynamoManager(DynamoManager manager) {
@@ -60,7 +60,7 @@ public class DynamoSessionTrackerValve extends ValveBase {
                 log.fine("Request with session completed, saving session " + session.getId());
                 if (session.getSession() != null) {
                     log.fine("HTTP Session present, saving " + session.getId());
-                    manager.save(session);
+                    manager.save((DynamoSession)session);
                 } else {
                     log.fine("No HTTP Session present, Not saving " + session.getId());
                 }
