@@ -530,11 +530,8 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
             }
 
             if (result == null || result.getItem() == null) {
-                log.info("Existing session " + id + " not found in Dynamo, so creating a new one");
-                DynamoSession ret = (DynamoSession) createEmptySession();
-                ret.setId(id);
-                setCurrentSession(ret);
-                return ret;
+                log.info("Existing session " + id + " not found in Dynamo");
+                return null;
             }
 
             ByteBuffer data = result.getItem().get(COLUMN_DATA).getB();

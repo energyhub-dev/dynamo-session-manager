@@ -28,6 +28,7 @@ import org.apache.catalina.valves.ValveBase;
 
 import javax.servlet.ServletException;
 import java.io.IOException;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 
@@ -57,15 +58,23 @@ public class DynamoSessionTrackerValve extends ValveBase {
         final Session session = request.getSessionInternal(false);
         if (session != null) {
             if (session.isValid()) {
-                log.fine("Request with session completed, saving session " + session.getId());
+                if (log.isLoggable(Level.FINE)) {
+                    log.fine("Request with session completed, saving session " + session.getId());
+                }
                 if (session.getSession() != null) {
-                    log.fine("HTTP Session present, saving " + session.getId());
+                    if (log.isLoggable(Level.FINE)) {
+                        log.fine("HTTP Session present, saving " + session.getId());
+                    }
                     manager.save((DynamoSession)session);
                 } else {
-                    log.fine("No HTTP Session present, Not saving " + session.getId());
+                    if (log.isLoggable(Level.FINE)) {
+                        log.fine("No HTTP Session present, Not saving " + session.getId());
+                    }
                 }
             } else {
-                log.fine("HTTP Session has been invalidated, removing :" + session.getId());
+                if (log.isLoggable(Level.FINE)) {
+                    log.fine("HTTP Session has been invalidated, removing :" + session.getId());
+                }
                 manager.remove(session);
             }
         }
