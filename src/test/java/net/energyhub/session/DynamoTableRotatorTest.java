@@ -174,7 +174,7 @@ public class DynamoTableRotatorTest {
     public void init_previousExists() throws Exception {
         // Check that we pick up an active table that is from a previous time period
         long nowSeconds = System.currentTimeMillis()/1000;
-        long twoTablesAgo = nowSeconds - 2*rotator.maxInactiveInterval;
+        long twoTablesAgo = nowSeconds - 2*rotator.tableRotationSeconds;
 
         String oldTableName = rotator.createCurrentTableName(twoTablesAgo);
         rotator.ensureTable(oldTableName, 10000);
