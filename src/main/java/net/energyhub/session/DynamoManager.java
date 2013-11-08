@@ -44,6 +44,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     protected static String awsSecretKey = "";  // Required for production environment
     protected static String dynamoEndpoint = ""; // used only for QA mock dynamo connections (not production)
     protected static String tableBaseName = "tomcat-sessions";
+    protected static int tableRotationSeconds = 86400;
     protected static int maxInactiveInterval = 3600; // default in seconds
     protected static String ignoreUri = "";
     protected static String ignoreHeader = "";
@@ -94,6 +95,14 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
 
     public static void setTableBaseName(String tableBaseName) {
         DynamoManager.tableBaseName = tableBaseName;
+    }
+
+    public static int getTableRotationSeconds() {
+        return tableRotationSeconds;
+    }
+
+    public static void setTableRotationSeconds(int tableRotationSeconds) {
+        DynamoManager.tableRotationSeconds = tableRotationSeconds;
     }
 
     public static String getAwsAccessKey() {
@@ -808,7 +817,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         long nowSeconds = System.currentTimeMillis() / 1000;
         try {
             getDynamo();
-            this.rotator = new DynamoTableRotator(getTableBaseName(), getMaxInactiveInterval(), getRequestsPerSecond(),
+            this.rotator = new DynamoTableRotator(getTableBaseName(), getTableRotationSeconds(), getRequestsPerSecond(),
                     getSessionSize(), getEventualConsistency(), getDynamo());
             rotator.init(nowSeconds); // set current table, will wait for a table to come online if we need to create
                                       // a new one.

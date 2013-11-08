@@ -53,7 +53,7 @@ public class DynamoTableRotator {
 
     protected AmazonDynamoDB dynamo;
     protected String tableBaseName;
-    protected Integer maxInactiveInterval;
+    protected Integer tableRotationSeconds;
     protected Integer requestsPerSecond; // for provisioning
     protected Integer sessionSize; // in kB
     protected Boolean eventualConsistency;
@@ -63,11 +63,11 @@ public class DynamoTableRotator {
 
     protected SimpleDateFormat dateFormat = new SimpleDateFormat(TABLE_DATE_FORMAT);
 
-    public DynamoTableRotator(String tableBaseName, Integer maxInactiveInterval, Integer requestsPerSecond,
+    public DynamoTableRotator(String tableBaseName, Integer tableRotationSeconds, Integer requestsPerSecond,
                               Integer sessionSize, Boolean eventualConsistency, AmazonDynamoDB dynamo) {
         log.info("Initializing rotator");
         this.tableBaseName = tableBaseName;
-        this.maxInactiveInterval = maxInactiveInterval;
+        this.tableRotationSeconds = tableRotationSeconds;
         this.requestsPerSecond = requestsPerSecond;
         this.sessionSize = sessionSize;
         this.eventualConsistency = eventualConsistency;
@@ -94,8 +94,8 @@ public class DynamoTableRotator {
         log.info("Initializing current table");
 
         for (int i=0; i<10; i++) {
-            log.info("Searching for table from " + i*maxInactiveInterval + " seconds ago");
-            long searchSeconds = nowSeconds - i*maxInactiveInterval;
+            log.info("Searching for table from " + i*tableRotationSeconds + " seconds ago");
+            long searchSeconds = nowSeconds - i*tableRotationSeconds;
             String tableName = createCurrentTableName(searchSeconds);
             if (isActive(tableName)) {
                 // Triple-check the table works before using it
@@ -166,7 +166,7 @@ public class DynamoTableRotator {
      * Look at existing tables to see if we need to pre-create the next new (future) table.
      */
     protected boolean createTableRequired(long nowSeconds) {
-        long timeOfNextTable = nowSeconds + maxInactiveInterval - nowSeconds % maxInactiveInterval;
+        long timeOfNextTable = nowSeconds + tableRotationSeconds - nowSeconds % tableRotationSeconds;
         if (timeOfNextTable >= nowSeconds + CREATE_TABLE_HEADROOM_SECONDS) {
             log.finer(timeOfNextTable-nowSeconds + " seconds until next table required, not doing it yet.");
             return false;
@@ -423,20 +423,20 @@ public class DynamoTableRotator {
 
     /**
      * Figure out the name of the current table using the current time.
-     * We bin the sessions into tables every maxInactiveInterval seconds
+     * We bin the sessions into tables every tableRotationSeconds seconds
      */
     protected String createCurrentTableName(long timestampSeconds) {
-        long tableTimestamp = timestampSeconds - timestampSeconds % this.maxInactiveInterval;
+        long tableTimestamp = timestampSeconds - timestampSeconds % this.tableRotationSeconds;
         return tableBaseName + "_" + timestampSecondsToString(tableTimestamp);
     }
 
     /**
      * Figure out the name of the previous table using the current time.
-     * We bin the sessions into tables every maxInactiveInterval seconds and
+     * We bin the sessions into tables every tableRotationSeconds seconds and
      * keep the last one around while we transition.
      */
     protected String createPreviousTableName(long timestampSeconds) {
-        long tableTimestamp = timestampSeconds - timestampSeconds % this.maxInactiveInterval - this.maxInactiveInterval;
+        long tableTimestamp = timestampSeconds - timestampSeconds % this.tableRotationSeconds - this.tableRotationSeconds;
         return tableBaseName + "_" + timestampSecondsToString(tableTimestamp);
     }
 
@@ -444,7 +444,7 @@ public class DynamoTableRotator {
      * Figure out the name of the next table using the current time.
      */
     protected String createNextTableName(long timestampSeconds) {
-        long tableTimestamp = timestampSeconds - timestampSeconds % maxInactiveInterval + maxInactiveInterval;
+        long tableTimestamp = timestampSeconds - timestampSeconds % tableRotationSeconds + tableRotationSeconds;
         return tableBaseName + "_" + timestampSecondsToString(tableTimestamp);
     }
 
