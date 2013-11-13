@@ -40,20 +40,20 @@ import java.util.regex.Pattern;
 public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener {
     final private static Logger log = Logger.getLogger(DynamoManager.class.getName());
 
-    protected static String awsAccessKey = "";  // Required for production environment
-    protected static String awsSecretKey = "";  // Required for production environment
-    protected static String dynamoEndpoint = ""; // used only for QA mock dynamo connections (not production)
-    protected static String tableBaseName = "tomcat-sessions";
-    protected static int tableRotationSeconds = 86400;
-    protected static int maxInactiveInterval = 3600; // default in seconds
-    protected static String ignoreUri = "";
-    protected static String ignoreHeader = "";
-    protected static boolean logSessionContents = false;
-    protected static int requestsPerSecond = 10; // for provisioning
-    protected static int sessionSize = 1; // in kB
-    protected static boolean eventualConsistency = false;
-    protected static String statsdHost = "";
-    protected static int statsdPort = 8125;
+    protected String awsAccessKey = "";  // Required for production environment
+    protected String awsSecretKey = "";  // Required for production environment
+    protected String dynamoEndpoint = ""; // used only for QA mock dynamo connections (not production)
+    protected String tableBaseName = "tomcat-sessions";
+    protected int tableRotationSeconds = 86400;
+    protected int maxInactiveInterval = 3600; // default in seconds
+    protected String ignoreUri = "";
+    protected String ignoreHeader = "";
+    protected boolean logSessionContents = false;
+    protected int requestsPerSecond = 10; // for provisioning
+    protected int sessionSize = 1; // in kB
+    protected boolean eventualConsistency = false;
+    protected String statsdHost = "";
+    protected int statsdPort = 8125;
 
     public static final String COLUMN_ID = "id";
     public static final String COLUMN_LAST_ACCESSED = "lastAccessed";
@@ -81,103 +81,103 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     /////////////////////////////////////////////////////////////////
     //   Getters and Setters for Implementation Properties
     /////////////////////////////////////////////////////////////////
-    public static String getDynamoEndpoint() {
+    public String getDynamoEndpoint() {
         return dynamoEndpoint;
     }
 
-    public static void setDynamoEndpoint(String endpoint) {
-        DynamoManager.dynamoEndpoint = endpoint;
+    public void setDynamoEndpoint(String endpoint) {
+        this.dynamoEndpoint = endpoint;
     }
 
-    public static String getTableBaseName() {
+    public String getTableBaseName() {
         return tableBaseName;
     }
 
-    public static void setTableBaseName(String tableBaseName) {
-        DynamoManager.tableBaseName = tableBaseName;
+    public void setTableBaseName(String tableBaseName) {
+        this.tableBaseName = tableBaseName;
     }
 
-    public static int getTableRotationSeconds() {
+    public int getTableRotationSeconds() {
         return tableRotationSeconds;
     }
 
-    public static void setTableRotationSeconds(int tableRotationSeconds) {
-        DynamoManager.tableRotationSeconds = tableRotationSeconds;
+    public void setTableRotationSeconds(int tableRotationSeconds) {
+        this.tableRotationSeconds = tableRotationSeconds;
     }
 
-    public static String getAwsAccessKey() {
+    public String getAwsAccessKey() {
         return awsAccessKey;
     }
 
-    public static void setAwsAccessKey(String awsAccessKey) {
-        DynamoManager.awsAccessKey = awsAccessKey;
+    public void setAwsAccessKey(String awsAccessKey) {
+        this.awsAccessKey = awsAccessKey;
     }
 
-    public static String getAwsSecretKey() {
+    public String getAwsSecretKey() {
         return awsSecretKey;
     }
 
-    public static void setAwsSecretKey(String awsSecretKey) {
-        DynamoManager.awsSecretKey = awsSecretKey;
+    public void setAwsSecretKey(String awsSecretKey) {
+        this.awsSecretKey = awsSecretKey;
     }
 
-    public static String getIgnoreHeader() {
+    public String getIgnoreHeader() {
         return ignoreHeader;
     }
 
-    public static void setIgnoreHeader(String ignoreHeader) {
-        DynamoManager.ignoreHeader = ignoreHeader;
+    public void setIgnoreHeader(String ignoreHeader) {
+        this.ignoreHeader = ignoreHeader;
     }
 
-    public static String getIgnoreUri() {
+    public String getIgnoreUri() {
         return ignoreUri;
     }
 
-    public static void setIgnoreUri(String ignoreUri) {
-        DynamoManager.ignoreUri = ignoreUri;
+    public void setIgnoreUri(String ignoreUri) {
+        this.ignoreUri = ignoreUri;
     }
 
-    public static boolean getLogSessionContents() {
+    public boolean getLogSessionContents() {
         return logSessionContents;
     }
 
-    public static void setLogSessionContents(boolean logSessionContents) {
-        DynamoManager.logSessionContents = logSessionContents;
+    public void setLogSessionContents(boolean logSessionContents) {
+        this.logSessionContents = logSessionContents;
     }
 
-    public static int getRequestsPerSecond() {
+    public int getRequestsPerSecond() {
         return requestsPerSecond;
     }
 
-    public static void setRequestsPerSecond(int requestsPerSecond) {
-        DynamoManager.requestsPerSecond = requestsPerSecond;
+    public void setRequestsPerSecond(int requestsPerSecond) {
+        this.requestsPerSecond = requestsPerSecond;
     }
 
-    public static int getSessionSize() {
+    public int getSessionSize() {
         return sessionSize;
     }
 
-    public static void setSessionSize(int sessionSize) {
-        DynamoManager.sessionSize = sessionSize;
+    public void setSessionSize(int sessionSize) {
+        this.sessionSize = sessionSize;
     }
 
-    public static boolean getEventualConsistency() {
+    public boolean getEventualConsistency() {
         return eventualConsistency;
     }
 
-    public static void setEventualConsistency(boolean eventualConsistency) {
-        DynamoManager.eventualConsistency = eventualConsistency;
+    public void setEventualConsistency(boolean eventualConsistency) {
+        this.eventualConsistency = eventualConsistency;
     }
 
-    public static void setStatsdHost(String statsdHost) {
-        DynamoManager.statsdHost = statsdHost;
+    public void setStatsdHost(String statsdHost) {
+        this.statsdHost = statsdHost;
     }
     public String getStatsdHost() {
         return statsdHost;
     }
 
-    public static void setStatsdPort(int statsdPort) {
-        DynamoManager.statsdPort = statsdPort;
+    public void setStatsdPort(int statsdPort) {
+        this.statsdPort = statsdPort;
     }
     public int getStatsdPort() {
         return statsdPort;
@@ -228,7 +228,6 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
             log.log(Level.SEVERE, "Unable to load serializer", e);
             throw new LifecycleException(e);
         }
-        log.info("Will expire sessions after " + getMaxInactiveInterval() + " ms");
         initDbConnection();
 
         if (!getIgnoreUri().isEmpty()) {
@@ -286,7 +285,8 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         // only the sessionTimeout property is relevant
         if (event.getPropertyName().equals("sessionTimeout")) {
             try {
-                setMaxInactiveInterval(((Integer)event.getNewValue()) * 60 );
+                int interval = ((Integer)event.getNewValue()) * 60;
+                setMaxInactiveInterval(interval);
             } catch (NumberFormatException e) {
                 log.severe("Invalid sessionTimeout setting: " + event.getNewValue().toString());
             }
@@ -315,6 +315,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
 
     @Override
     public void setMaxInactiveInterval(int i) {
+        log.info("Session timeout is set to " + i + " seconds");
         maxInactiveInterval = i;
     }
 
@@ -566,8 +567,12 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
             }
 
             // assert active
-            if (!isActive(lastAccessed, System.currentTimeMillis(), session.getMaxInactiveInterval())) {
-                log.info("Existing session " + id + " expired, so creating a new one");
+            long now = System.currentTimeMillis();
+            if (!isActive(lastAccessed, now, session.getMaxInactiveInterval())) {
+                log.fine("Existing session " + id + " expired, so creating a new one: " +
+                        "last accessed = " + lastAccessed +
+                        ", now = " + now +
+                        ", max inactive = " + session.getMaxInactiveInterval());
                 session.expire(); // internal processing, whatever that means
                 remove(session); // delete
                 return null; // return null if the session is inactive
