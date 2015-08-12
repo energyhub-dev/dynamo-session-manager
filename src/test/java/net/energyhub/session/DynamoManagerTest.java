@@ -47,7 +47,7 @@ public class DynamoManagerTest {
 
     @Test
     public void testSaveLoad() throws Exception {
-        Session session = this.manager.createSession();
+        Session session = this.manager.createSession(null);
         log.info("Created session:" + session.getId() + "; access = " + session.getLastAccessedTime());
 
         this.manager.save((DynamoSession)session);
@@ -112,7 +112,7 @@ public class DynamoManagerTest {
 
 
     protected StandardSession setUpSession(Map<String, Object> attributes) {
-        StandardSession originalSession = (StandardSession) this.manager.createSession();
+        StandardSession originalSession = (StandardSession) this.manager.createSession(null);
         for (Map.Entry<String, Object> entry : attributes.entrySet()) {
             originalSession.getSession().setAttribute(entry.getKey(), entry.getValue());
         }

@@ -40,6 +40,8 @@ import java.util.regex.Pattern;
 public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener {
     final private static Logger log = Logger.getLogger(DynamoManager.class.getName());
 
+    private final Object lifecycleMonitor = new Object();
+
     protected String awsAccessKey = "";  // Required for production environment
     protected String awsSecretKey = "";  // Required for production environment
     protected String dynamoEndpoint = ""; // used only for QA mock dynamo connections (not production)
@@ -77,6 +79,8 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
 
     private Pattern ignoreUriPattern;
     private Pattern ignoreHeaderPattern;
+
+    private volatile LifecycleState lifecycleState = LifecycleState.NEW;
 
     /////////////////////////////////////////////////////////////////
     //   Getters and Setters for Implementation Properties
@@ -206,7 +210,13 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     }
 
     @Override
+    public void init() throws LifecycleException {
+        updateLifecycleState(LifecycleState.INITIALIZED);
+    }
+
+    @Override
     public void start() throws LifecycleException {
+        updateLifecycleState(LifecycleState.STARTING);
         log.info("Starting Dynamo Session Manager in container: " + this.getContainer().getName());
         for (Valve valve : getContainer().getPipeline().getValves()) {
             if (valve instanceof DynamoSessionTrackerValve) {
@@ -243,10 +253,30 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
             this.statsdClient = new StatsdClient(getStatsdHost(), getStatsdPort());
         }
         log.info("Finished starting manager");
+
+        updateLifecycleState(LifecycleState.STARTED);
     }
 
+    @Override
     public void stop() throws LifecycleException {
+        updateLifecycleState(LifecycleState.STOPPING);
         getDynamo().shutdown();
+        updateLifecycleState(LifecycleState.STOPPED);
+    }
+
+    @Override
+    public void destroy() throws LifecycleException {
+        updateLifecycleState(LifecycleState.DESTROYED);
+    }
+
+    @Override
+    public LifecycleState getState() {
+        return lifecycleState;
+    }
+
+    @Override
+    public String getStateName() {
+        return lifecycleState.name();
     }
 
     //////////////////////////////////////////////////////////////////////////////////
@@ -330,12 +360,12 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     }
 
     @Override
-    public int getSessionCounter() {
+    public long getSessionCounter() {
         return 10000000;
     }
 
     @Override
-    public void setSessionCounter(int i) {
+    public void setSessionCounter(long l) {
 
     }
 
@@ -355,22 +385,18 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     }
 
     @Override
-    public int getExpiredSessions() {
+    public long getExpiredSessions() {
         return 0;
     }
 
     @Override
-    public void setExpiredSessions(int i) {
+    public void setExpiredSessions(long l) {
 
     }
 
     @Override
     public int getRejectedSessions() {
         return 0;
-    }
-
-    @Override
-    public void setRejectedSessions(int i) {
     }
 
     @Override
@@ -389,9 +415,15 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     }
 
     @Override
-    public void setSessionAverageAliveTime(int i) {
-
+    public int getSessionCreateRate() {
+        return 0;
     }
+
+    @Override
+    public int getSessionExpireRate() {
+        return 0;
+    }
+
     @Override
     public void load() throws ClassNotFoundException, IOException {
 
@@ -444,14 +476,6 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         setCurrentSession(session);
         log.fine("Created new empty session " + session.getIdInternal());
         return session;
-    }
-
-    /**
-     * @deprecated
-     */
-    @Override
-    public org.apache.catalina.Session createSession() {
-        return createEmptySession();
     }
 
     @Override
@@ -639,11 +663,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     private int hashSession(DynamoSession session) {
         int prime = 31;
         int hash = 0;
-        List<Object> attrs = Collections.list(session.getAttributeNames());
-        List<String> attrNames = new ArrayList<String>();
-        for (Object name : attrs) {
-            attrNames.add(name.toString());
-        }
+        List<String> attrNames = Collections.list(session.getAttributeNames());
         Collections.sort(attrNames);
         for (String name : attrNames) {
             hash = prime * hash + session.getAttribute(name).hashCode();
@@ -799,6 +819,11 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         }
     }
 
+    @Override
+    public void remove(Session session, boolean b) {
+        remove(session);
+    }
+
     protected AmazonDynamoDB getDynamo() {
         if (this.dynamo != null) {
             return this.dynamo;
@@ -877,6 +902,13 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
             }
         }
         return false;
+    }
+
+    private void updateLifecycleState(LifecycleState lifecycleState) {
+        synchronized (lifecycleMonitor) {
+            this.lifecycleState = lifecycleState;
+            lifecycleMonitor.notifyAll();
+        }
     }
 
 }
