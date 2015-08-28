@@ -27,10 +27,13 @@ import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
 import com.amazonaws.services.dynamodbv2.document.DeleteItemOutcome;
 import com.amazonaws.services.dynamodbv2.document.DynamoDB;
 import com.amazonaws.services.dynamodbv2.document.Item;
+import com.amazonaws.services.dynamodbv2.document.ItemCollection;
+import com.amazonaws.services.dynamodbv2.document.ScanOutcome;
 import com.amazonaws.services.dynamodbv2.document.Table;
 import com.amazonaws.services.dynamodbv2.document.spec.DeleteItemSpec;
 import com.amazonaws.services.dynamodbv2.document.spec.GetItemSpec;
 import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
+import com.amazonaws.services.dynamodbv2.document.spec.ScanSpec;
 import com.amazonaws.services.dynamodbv2.document.utils.NameMap;
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
@@ -64,6 +67,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -82,9 +86,12 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     public static final String INDEX_LAST_ACCESSED = "LastAccessedIndex";
 
     private final Object lifecycleMonitor = new Object();
-    private final String sessionTableName = "tomcat-sessions";
+
+    private String sessionTableName = "tomcat-sessions";
 
     private final ExecutorService executorService = Executors.newCachedThreadPool();
+
+    private final ThreadLocal<DynamoSession> currentSession = new ThreadLocal<>();
 
     protected String awsAccessKey = "";  // Required for production environment
     protected String awsSecretKey = "";  // Required for production environment
@@ -92,26 +99,27 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
 
     protected int maxInactiveInterval = 3600; // default in seconds
 
-    protected boolean logSessionContents = false;
-    protected boolean eventualConsistency = false;
+    protected boolean logSessionContents;
+    protected boolean eventualConsistency;
+
     protected String statsdHost = "";
     protected int statsdPort = 8125;
-
-    private ThreadLocal<DynamoSession> currentSession = new ThreadLocal<>();
 
     // maintain hash of attributes on load so we can compare against a
     // hash when deciding to update in dynamo
     private int originalAttributeHash = 0;
 
-    private Serializer serializer;
-    private StatsdClient statsdClient = null;
-
     //Either 'kryo' or 'java'
+
     private String serializationStrategyClass = "net.energyhub.session.JavaSerializer";
 
     private Container container;
-    private volatile LifecycleState lifecycleState = LifecycleState.NEW;
+    private Serializer serializer;
+    private StatsdClient statsdClient;
+
     private DynamoDB dynamoDb;
+
+    private volatile LifecycleState lifecycleState = LifecycleState.NEW;
 
     /////////////////////////////////////////////////////////////////
     //   Getters and Setters for Implementation Properties
@@ -168,6 +176,10 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     }
     public int getStatsdPort() {
         return statsdPort;
+    }
+
+    public void setSessionTableName(String sessionTableName) {
+        this.sessionTableName = sessionTableName;
     }
 
     public void setSerializationStrategyClass(String strategy) {
@@ -274,23 +286,21 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
 
         // primary index
         List<KeySchemaElement> keySchema = new ArrayList<>();
-        keySchema.add(new KeySchemaElement()
-                .withAttributeName(COLUMN_ID)
-                .withKeyType(KeyType.HASH));
+        keySchema.add(new KeySchemaElement().withAttributeName(COLUMN_ID).withKeyType(KeyType.HASH));
 
         // provisioned throughput for table
         ProvisionedThroughput provisionedThroughput = new ProvisionedThroughput()
-                .withWriteCapacityUnits(400l)
-                .withReadCapacityUnits(400l);
+                .withWriteCapacityUnits(100l)
+                .withReadCapacityUnits(100l);
 
         // secondary key index
         GlobalSecondaryIndex lastAccessedIndex = new GlobalSecondaryIndex()
                 .withIndexName(INDEX_LAST_ACCESSED)
-                .withKeySchema(new KeySchemaElement().withAttributeName(COLUMN_LAST_ACCESSED)
-                        .withKeyType(KeyType.HASH))
+                .withKeySchema(new KeySchemaElement().withAttributeName(COLUMN_ID).withKeyType(KeyType.HASH),
+                        new KeySchemaElement().withAttributeName(COLUMN_LAST_ACCESSED).withKeyType(KeyType.RANGE))
                 .withProvisionedThroughput(new ProvisionedThroughput()
-                        .withWriteCapacityUnits(400l)
-                        .withReadCapacityUnits(400l))
+                        .withWriteCapacityUnits(100l)
+                        .withReadCapacityUnits(100l))
                 .withProjection(new Projection().withProjectionType(ProjectionType.KEYS_ONLY));
 
         CreateTableRequest createTableRequest  = new CreateTableRequest()
@@ -529,15 +539,15 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
 
         NameMap nameMap = new NameMap().with("#la", COLUMN_LAST_ACCESSED);
         ValueMap valueMap= new ValueMap().withNumber(":v_last_accessed_cutoff", cutoffMillis);
-        QuerySpec querySpec = new QuerySpec()
-                .withKeyConditionExpression(conditionExpression)
+        ScanSpec scanSpec = new ScanSpec()
+                .withFilterExpression(conditionExpression)
                 .withNameMap(nameMap)
                 .withValueMap(valueMap);
 
         Table table = dynamoDb.getTable(sessionTableName);
 
         // query index for expired
-        for (Item item : table.getIndex(INDEX_LAST_ACCESSED).query(querySpec)) {
+        for (Item item : table.getIndex(INDEX_LAST_ACCESSED).scan(scanSpec)) {
             // launch task to delete each one -- enforcing condition at time of deletion too, to avoid race condition
             executorService.submit(() -> {
                 String sessionId = item.getString(COLUMN_ID);

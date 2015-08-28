@@ -16,6 +16,8 @@ import java.util.logging.Logger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -38,9 +40,8 @@ public class DynamoManagerTest {
 //
 //        // and now your code
 //        manager = new DynamoManager();
-//        manager.setAwsAccessKey("blah");
-//        manager.setAwsSecretKey("blah");
-//        manager.setDynamoEndpoint(String.format("http://localhost:%s", PORT));
+//        manager.setAwsAccessKey("");
+//        manager.setAwsSecretKey("");
 //        manager.setContainer(container);
 //        manager.setMaxInactiveInterval(maxInterval);
 //        manager.start();
@@ -48,7 +49,6 @@ public class DynamoManagerTest {
 //        when(container.getLogger()).thenReturn(logger);
 //        log.setLevel(Level.FINE);
 //        Logger.getLogger(DynamoManager.class.getName()).setLevel(Level.FINE);
-//        Logger.getLogger("org.apache.http.wire").setLevel(Level.INFO);
 //    }
 //
 //    @After
@@ -86,7 +86,7 @@ public class DynamoManagerTest {
 //
 //    @Test
 //    public void testHaveAttributesChanged() throws Exception {
-//        Map<String, Object> originalAttributes = new HashMap();
+//        Map<String, Object> originalAttributes = new HashMap<>();
 //        originalAttributes.put("FOO", "BAR");
 //        originalAttributes.put("FOO2", "BAR2");
 //
@@ -120,14 +120,34 @@ public class DynamoManagerTest {
 //        // attribute has not changed
 //        assertFalse(this.manager.haveAttributesChanged((DynamoSession)session));
 //    }
-
-
-    protected StandardSession setUpSession(Map<String, Object> attributes) {
-        StandardSession originalSession = (StandardSession) this.manager.createSession(null);
-        for (Map.Entry<String, Object> entry : attributes.entrySet()) {
-            originalSession.getSession().setAttribute(entry.getKey(), entry.getValue());
-        }
-        this.manager.setCurrentSession((DynamoSession)originalSession);
-        return originalSession;
-    }
+//
+//    @Test
+//    public void reaps() throws Exception {
+//        Session session = manager.createSession(null);
+//        log.info("Created session:" + session.getId() + "; access = " + session.getLastAccessedTime());
+//        log.info("Saved session:" + session.getId() + "; access = " + session.getLastAccessedTime());
+//        manager.afterRequest(); // swap out
+//
+//        String id = session.getId();
+//        assertNotNull(manager.findSession(id)); // must load from DB
+//        manager.afterRequest(); // swap out
+//
+//        manager.setMaxInactiveInterval(0);
+//        Thread.sleep(1000l);
+//        manager.backgroundProcess();
+//        Thread.sleep(1000l);
+//
+//        Session lastSession = manager.findSession(id);
+//        assertNull(lastSession); // should be deleted
+//    }
+//
+//
+//    protected StandardSession setUpSession(Map<String, Object> attributes) {
+//        StandardSession originalSession = (StandardSession) this.manager.createSession(null);
+//        for (Map.Entry<String, Object> entry : attributes.entrySet()) {
+//            originalSession.getSession().setAttribute(entry.getKey(), entry.getValue());
+//        }
+//        this.manager.setCurrentSession((DynamoSession)originalSession);
+//        return originalSession;
+//    }
 }
