@@ -21,23 +21,42 @@
 
 package net.energyhub.session;
 
-import org.apache.catalina.Session;
 import org.apache.catalina.connector.Request;
 import org.apache.catalina.connector.Response;
 import org.apache.catalina.valves.ValveBase;
 
 import javax.servlet.ServletException;
 import java.io.IOException;
+import java.util.Enumeration;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 
 
 public class DynamoSessionTrackerValve extends ValveBase {
     final private static Logger log = Logger.getLogger(DynamoSessionTrackerValve.class.getName());
+
     private DynamoManager manager;
+
+    protected String ignoreUri = "";
+    protected String ignoreHeader = "";
+    private Pattern ignoreUriPattern;
+    private Pattern ignoreHeaderPattern;
 
     public void setDynamoManager(DynamoManager manager) {
         this.manager = manager;
+    }
+
+    @Override
+    public void initInternal() {
+        if (!getIgnoreUri().isEmpty()) {
+            log.info("Setting URI ignore regex to: " + getIgnoreUri());
+            ignoreUriPattern = Pattern.compile(getIgnoreUri());
+        }
+        if (!getIgnoreHeader().isEmpty()) {
+            log.info("Setting header ignore regex to: " + getIgnoreHeader());
+            ignoreHeaderPattern = Pattern.compile(getIgnoreHeader());
+        }
     }
 
     @Override
@@ -45,38 +64,49 @@ public class DynamoSessionTrackerValve extends ValveBase {
         try {
             getNext().invoke(request, response);
         } finally {
-            storeSession(request, response);
+            if (!isIgnorable(request)) {
+                manager.afterRequest();
+            }
         }
     }
 
-    private void storeSession(Request request, Response response) throws IOException {
-        // Use configurable regexes to avoid saving certain requests to the database.
-        if (manager.isIgnorable(request)) {
-            return;
-        }
-
-        final Session session = request.getSessionInternal(false);
-        if (session != null) {
-            if (session.isValid()) {
+    protected boolean isIgnorable(Request request) {
+        if (ignoreUriPattern != null) {
+            if (ignoreUriPattern.matcher(request.getRequestURI()).matches()) {
                 if (log.isLoggable(Level.FINE)) {
-                    log.fine("Request with session completed, saving session " + session.getId());
+                    log.fine("Session manager will ignore this session based on uri: " + request.getRequestURI());
                 }
-                if (session.getSession() != null) {
-                    if (log.isLoggable(Level.FINE)) {
-                        log.fine("HTTP Session present, saving " + session.getId());
-                    }
-                    manager.save((DynamoSession)session);
-                } else {
-                    if (log.isLoggable(Level.FINE)) {
-                        log.fine("No HTTP Session present, Not saving " + session.getId());
-                    }
-                }
-            } else {
-                if (log.isLoggable(Level.FINE)) {
-                    log.fine("HTTP Session has been invalidated, removing :" + session.getId());
-                }
-                manager.remove(session);
+                return true;
             }
         }
+        if (ignoreHeaderPattern != null) {
+            for (Enumeration headers = request.getHeaderNames(); headers.hasMoreElements(); ) {
+                String header = headers.nextElement().toString();
+                if (ignoreHeaderPattern.matcher(header).matches()) {
+                    if (log.isLoggable(Level.FINE)) {
+                        log.fine("Session manager will ignore this session based on header: " + header);
+                    }
+                    return true;
+                }
+
+            }
+        }
+        return false;
+    }
+
+    public String getIgnoreUri() {
+        return ignoreUri;
+    }
+
+    public String getIgnoreHeader() {
+        return ignoreHeader;
+    }
+
+    public void setIgnoreUri(String ignoreUri) {
+        this.ignoreUri = ignoreUri;
+    }
+
+    public void setIgnoreHeader(String ignoreHeader) {
+        this.ignoreHeader = ignoreHeader;
     }
 }

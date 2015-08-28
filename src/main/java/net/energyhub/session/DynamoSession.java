@@ -21,7 +21,6 @@
 
 package net.energyhub.session;
 
-import com.amazonaws.services.dynamodb.model.AttributeValue;
 import org.apache.catalina.Manager;
 import org.apache.catalina.session.StandardSession;
 
@@ -63,10 +62,6 @@ public class DynamoSession extends StandardSession {
     @Override
     public void setId(String id) {
         this.id = id;
-    }
-
-    public AttributeValue getAttributeValue() {
-        return new AttributeValue().withS(this.id);
     }
 
     public void setLastAccessedTime(long accessTime) {

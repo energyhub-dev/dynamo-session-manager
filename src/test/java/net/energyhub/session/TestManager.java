@@ -1,8 +1,6 @@
 package net.energyhub.session;
 
-import static org.mockito.Mockito.*;
-
-import com.amazonaws.services.dynamodb.AmazonDynamoDB;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import org.apache.catalina.Container;
 import org.apache.catalina.Context;
 import org.apache.catalina.Pipeline;
@@ -10,7 +8,9 @@ import org.apache.catalina.Valve;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 
-import java.util.ArrayList;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.withSettings;
 
 
 /** Test dynamo manager to inject alternator
@@ -24,7 +24,7 @@ public class TestManager extends DynamoManager {
     }
 
     @Override
-    protected AmazonDynamoDB getDynamo() {
+    protected AmazonDynamoDB initDynamoClient() {
         return dbClient;
     }
 
