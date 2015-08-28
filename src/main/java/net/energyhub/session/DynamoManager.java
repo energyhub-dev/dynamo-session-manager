@@ -27,17 +27,13 @@ import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
 import com.amazonaws.services.dynamodbv2.document.DeleteItemOutcome;
 import com.amazonaws.services.dynamodbv2.document.DynamoDB;
 import com.amazonaws.services.dynamodbv2.document.Item;
-import com.amazonaws.services.dynamodbv2.document.ItemCollection;
-import com.amazonaws.services.dynamodbv2.document.ScanOutcome;
 import com.amazonaws.services.dynamodbv2.document.Table;
 import com.amazonaws.services.dynamodbv2.document.spec.DeleteItemSpec;
 import com.amazonaws.services.dynamodbv2.document.spec.GetItemSpec;
-import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
 import com.amazonaws.services.dynamodbv2.document.spec.ScanSpec;
 import com.amazonaws.services.dynamodbv2.document.utils.NameMap;
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
-import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
 import com.amazonaws.services.dynamodbv2.model.GlobalSecondaryIndex;
 import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
@@ -59,6 +55,7 @@ import org.apache.catalina.Loader;
 import org.apache.catalina.Manager;
 import org.apache.catalina.Session;
 import org.apache.catalina.Valve;
+import org.apache.catalina.session.StandardSession;
 
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
@@ -90,7 +87,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
 
     private final ExecutorService executorService = Executors.newCachedThreadPool();
 
-    private final ThreadLocal<DynamoSession> currentSession = new ThreadLocal<>();
+    private final ThreadLocal<StandardSession> currentSession = new ThreadLocal<>();
     // maintain hash of attributes on load so we can compare against a
     // hash when deciding to update in dynamo
     private final ThreadLocal<Integer> originalAttributeHash = new ThreadLocal<>();
@@ -513,7 +510,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     @Override
     public void add(Session session) {
         try {
-            save((DynamoSession)session);
+            save((StandardSession)session);
         } catch (IOException ex) {
             log.log(Level.SEVERE, "Error adding new session", ex);
         }
@@ -558,7 +555,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
                         .withValueMap(valueMap));
 
                 if (deleteItemOutcome.getItem() != null) {
-                    log.finer("Repeaed session " + sessionId + " with last accessed " + deleteItemOutcome.getItem().getNumber(COLUMN_LAST_ACCESSED));
+                    log.finer("Reaped session " + sessionId + " with last accessed " + deleteItemOutcome.getItem().getNumber(COLUMN_LAST_ACCESSED));
                 }
             });
         }
@@ -566,7 +563,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
 
     public void afterRequest() {
         try {
-            DynamoSession session = currentSession.get();
+            StandardSession session = currentSession.get();
             if (session != null) {
                 if (session.isValid()) {
                     if (log.isLoggable(Level.FINE)) {
@@ -606,7 +603,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
 
     @Override
     public Session createEmptySession() {
-        DynamoSession session = new DynamoSession(this);
+        StandardSession session = new StandardSession(this);
         session.setId(UUID.randomUUID().toString());
         session.setMaxInactiveInterval(maxInactiveInterval);
         session.setValid(true);
@@ -618,8 +615,8 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     }
 
     @Override
-    public org.apache.catalina.Session createSession(java.lang.String sessionId) {
-        DynamoSession session = (DynamoSession) createEmptySession();
+    public Session createSession(String sessionId) {
+        Session session = createEmptySession();
 
         if (sessionId != null) {
             session.setId(sessionId);
@@ -635,7 +632,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
      * @return an empty array
      */
     @Override
-    public org.apache.catalina.Session[] findSessions() {
+    public Session[] findSessions() {
         return new Session[]{};
     }
 
@@ -646,7 +643,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
             return createEmptySession();
         }
 
-        DynamoSession session = currentSession.get();
+        StandardSession session = currentSession.get();
         if (session != null) {
             if (id.equals(session.getId())) {
                 return session;
@@ -684,7 +681,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
                 log.fine("Session " + id + " lastAccessed at " + lastAccessed);
             }
 
-            session = (DynamoSession) createEmptySession();
+            session = (StandardSession)createEmptySession();
             session.setId(id);
             session.setManager(this);
             long t2 = System.currentTimeMillis();
@@ -716,11 +713,6 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
                     log.fine("  " + name.toString());
                 }
             }
-
-            // Set the lastAccessedTime according to the lastAccessedTime from the dynamo record,
-            // since we don't save the serialized session itself if attributes haven't changed
-            session.setLastAccessedTime(lastAccessed);
-
             long t1 = System.currentTimeMillis();
 
             if (log.isLoggable(Level.FINE)) {
@@ -754,7 +746,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         return (inactiveMilli < maxInactiveMilli);
     }
 
-    private int hashSession(DynamoSession session) {
+    private int hashSession(StandardSession session) {
         int prime = 31;
         int hash = 0;
         List<String> attrNames = Collections.list(session.getAttributeNames());
@@ -769,7 +761,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
      * Store the session and attributes at create or load time, for comparison later on.
      * @param session the session
      */
-    protected void setCurrentSession(DynamoSession session) {
+    protected void setCurrentSession(StandardSession session) {
         currentSession.set(session);
         originalAttributeHash.set(hashSession(session));
     }
@@ -779,26 +771,21 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         originalAttributeHash.remove();
     }
 
-    public void save(DynamoSession dynamoSession) throws IOException {
+    public void save(StandardSession session) throws IOException {
         long t0 = System.currentTimeMillis();
         try {
             if (log.isLoggable(Level.FINE)) {
-                log.fine("Saving session " + dynamoSession.getIdInternal() + " into Dynamo (" + sessionTableName + ")");
+                log.fine("Saving session " + session.getIdInternal() + " into Dynamo (" + sessionTableName + ")");
             }
-
-            Map<String, AttributeValue> dbData = new HashMap<>();
-            // We save lastAccessed on every access
-            dbData.put(COLUMN_LAST_ACCESSED, new AttributeValue().withN(Long.toString(System.currentTimeMillis(), 10)));
-
-            if (dynamoSession.isNew()) {
-                putSessionInDynamo(dynamoSession); // new session, use PutItem
+            if (session.isNew()) {
+                putSessionInDynamo(session); // new session, use PutItem
             } else {
-                updateSessionInDynamo(dynamoSession); // existing session, use UpdateItem
+                updateSessionInDynamo(session); // existing session, use UpdateItem
             }
 
             long t1 = System.currentTimeMillis();
             if (log.isLoggable(Level.FINE)) {
-                log.fine("Updated session with id " + dynamoSession.getIdInternal() + " in " + (t1 - t0) + "ms");
+                log.fine("Updated session with id " + session.getIdInternal() + " in " + (t1 - t0) + "ms");
             }
             if (statsdClient != null) {
                 statsdClient.time("session.save", t0, t1);
@@ -809,7 +796,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         } finally {
             removeCurrentSession();
             if (log.isLoggable(Level.FINE)) {
-                log.fine("Session " + dynamoSession.getIdInternal() + " removed from ThreadLocal");
+                log.fine("Session " + session.getIdInternal() + " removed from ThreadLocal");
             }
         }
     }
@@ -820,7 +807,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
      * @return how many units were consumed
      * @throws IOException if something bad happens
      */
-    protected void putSessionInDynamo(DynamoSession session) throws IOException {
+    protected void putSessionInDynamo(StandardSession session) throws IOException {
         // New session, do PutItem
         if (log.isLoggable(Level.FINE)) {
             log.fine("Storing new session for " + session.getIdInternal());
@@ -839,7 +826,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
      * @param session the session
      * @throws IOException if something bad happens
      */
-    protected void updateSessionInDynamo(DynamoSession session) throws IOException {
+    protected void updateSessionInDynamo(StandardSession session) throws IOException {
         Map<String, String> expressionAttributeNames = new HashMap<>();
         Map<String, Object> expressionAttributeValues = new HashMap<>();
 
@@ -870,7 +857,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
      * @param session the session to check
      * @return whether attributes have changed
      */
-    protected boolean haveAttributesChanged(DynamoSession session) {
+    protected boolean haveAttributesChanged(StandardSession session) {
         if (logSessionContents && log.isLoggable(Level.FINE)) {
             log.fine("Session Contents [" + session.getId() + "]:");
         }
