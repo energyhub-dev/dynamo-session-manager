@@ -595,7 +595,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
                 }
             }
         } finally {
-            currentSession.remove();
+            removeCurrentSession();
         }
     }
 
