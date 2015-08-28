@@ -67,7 +67,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -92,6 +91,9 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     private final ExecutorService executorService = Executors.newCachedThreadPool();
 
     private final ThreadLocal<DynamoSession> currentSession = new ThreadLocal<>();
+    // maintain hash of attributes on load so we can compare against a
+    // hash when deciding to update in dynamo
+    private final ThreadLocal<Integer> originalAttributeHash = new ThreadLocal<>();
 
     protected String awsAccessKey = "";  // Required for production environment
     protected String awsSecretKey = "";  // Required for production environment
@@ -104,10 +106,6 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
 
     protected String statsdHost = "";
     protected int statsdPort = 8125;
-
-    // maintain hash of attributes on load so we can compare against a
-    // hash when deciding to update in dynamo
-    private int originalAttributeHash = 0;
 
     //Either 'kryo' or 'java'
 
@@ -653,7 +651,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
             if (id.equals(session.getId())) {
                 return session;
             } else {
-                currentSession.remove();
+                removeCurrentSession();
             }
         }
 
@@ -773,7 +771,12 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
      */
     protected void setCurrentSession(DynamoSession session) {
         currentSession.set(session);
-        originalAttributeHash = hashSession(session);
+        originalAttributeHash.set(hashSession(session));
+    }
+
+    protected void removeCurrentSession() {
+        currentSession.remove();
+        originalAttributeHash.remove();
     }
 
     public void save(DynamoSession dynamoSession) throws IOException {
@@ -804,8 +807,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
             log.severe(e.getMessage());
             throw e;
         } finally {
-            currentSession.remove();
-            originalAttributeHash = 0;
+            removeCurrentSession();
             if (log.isLoggable(Level.FINE)) {
                 log.fine("Session " + dynamoSession.getIdInternal() + " removed from ThreadLocal");
             }
@@ -852,7 +854,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
             expressionAttributeNames.put("#B", COLUMN_DATA);
             expressionAttributeValues.put(":val2", serializer.serializeFrom(session));
 
-            updateExpression = "set #T = :val1 set #B = :val2";
+            updateExpression = "set #T = :val1, #B = :val2";
         } else if (log.isLoggable(Level.FINE)) {
             log.fine("Attributes have not changed, saving session data for " + session.getIdInternal());
         }
@@ -872,7 +874,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         if (logSessionContents && log.isLoggable(Level.FINE)) {
             log.fine("Session Contents [" + session.getId() + "]:");
         }
-        return hashSession(session) != originalAttributeHash;
+        return originalAttributeHash.get() != null && originalAttributeHash.get() == hashSession(session);
     }
 
     @Override
@@ -885,8 +887,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         } catch (Exception e) {
             log.log(Level.SEVERE, "Error removing session in Dynamo Session Store", e);
         } finally {
-            currentSession.remove();
-            originalAttributeHash = 0;
+            removeCurrentSession();
         }
     }
 
