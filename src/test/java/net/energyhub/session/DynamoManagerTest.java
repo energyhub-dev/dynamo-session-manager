@@ -1,6 +1,27 @@
 package net.energyhub.session;
 
+import org.apache.catalina.Container;
+import org.apache.catalina.Pipeline;
+import org.apache.catalina.Session;
+import org.apache.catalina.Valve;
+import org.apache.catalina.session.StandardSession;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.withSettings;
 
 public class DynamoManagerTest {
     private static Logger log = Logger.getLogger(DynamoManagerTest.class.getName());
