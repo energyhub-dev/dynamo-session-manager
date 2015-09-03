@@ -13,28 +13,24 @@ import com.michelboudreau.alternator.AlternatorDBClient;
 
 import java.lang.String;
 import java.util.List;
-import java.util.logging.Logger;
 
 /**
  * User: oneill
  * Date: 3/22/13
  */
 public class DynamoTableRotatorTest {
-    private static Logger log = Logger.getLogger("net.energyhub.session.DynamoRotatorTest");
-
     private DynamoTableRotator rotator;
     private AmazonDynamoDB dynamo;
     private AlternatorDB db;
     private int maxInterval = 180;
-    private int requestsPerSecond = 20;
-    private int sessionSize = 2;
-    private boolean eventualConsistency = false;
+    private long defaultReadCapacity = 20;
+    private long defaultWriteCapacity = 5;
 
     @Before
     public void setUp() throws Exception {
         this.dynamo = new AlternatorDBClient();
         this.db = new AlternatorDB().start();
-        this.rotator = new DynamoTableRotator("testTables", maxInterval, requestsPerSecond, sessionSize, eventualConsistency, dynamo);
+        this.rotator = new DynamoTableRotator("testTables", maxInterval, defaultReadCapacity, defaultWriteCapacity, dynamo);
     }
 
     @After
@@ -53,22 +49,6 @@ public class DynamoTableRotatorTest {
         // later, table does need to rotate
         assertTrue(rotator.rotationRequired(startSeconds + maxInterval + 1));
 
-    }
-
-    @Test
-    public void testGetProvisionedThroughputObject() throws Exception {
-        assertFalse(this.eventualConsistency);
-        ProvisionedThroughput pt_rw = rotator.getProvisionedThroughputObject(false);
-        long readsPerSession = (long) Math.ceil(Float.valueOf(sessionSize) /
-                                                Float.valueOf(DynamoTableRotator.KBS_PER_READ_UNIT));
-        long writesPerSession = (long) Math.ceil(Float.valueOf(sessionSize) /
-                Float.valueOf(DynamoTableRotator.KBS_PER_WRITE_UNIT));
-        assertEquals(readsPerSession * requestsPerSecond, pt_rw.getReadCapacityUnits().longValue());
-        assertEquals(writesPerSession * requestsPerSecond, pt_rw.getWriteCapacityUnits().longValue());
-
-        ProvisionedThroughput pt_ro = rotator.getProvisionedThroughputObject(true);
-        assertEquals(readsPerSession * requestsPerSecond, pt_ro.getReadCapacityUnits().longValue());
-        assertEquals(1L, pt_ro.getWriteCapacityUnits().longValue());
     }
 
     @Test
@@ -104,27 +84,45 @@ public class DynamoTableRotatorTest {
 
         // just starting, create current
         assertTrue(rotator.rotationRequired(startSeconds));
-        rotator.rotateTables(startSeconds);
+        rotator.rotateTables(startSeconds, defaultReadCapacity, defaultWriteCapacity);
         tables = dynamo.listTables().getTableNames();
         assertEquals(1, tables.size());
 
-        String firstTable = rotator.getCurrentTableName();
+        // table created with default throughput capacity
+        TableDescription firstTable = rotator.getTable(rotator.getCurrentTableName());
+        assertNotNull(firstTable);
+        assertEquals(defaultReadCapacity, firstTable.getProvisionedThroughput().getReadCapacityUnits().longValue());
+        assertEquals(defaultWriteCapacity, firstTable.getProvisionedThroughput().getWriteCapacityUnits().longValue());
         assertNull(rotator.getPreviousTableName());
 
         // just current
-        rotator.rotateTables(startSeconds + maxInterval  - 1);
+        rotator.rotateTables(startSeconds + maxInterval  - 1, defaultReadCapacity, defaultWriteCapacity);
         tables = dynamo.listTables().getTableNames();
         assertEquals(1, tables.size());
-        assertEquals(firstTable, rotator.getCurrentTableName());
+        assertEquals(firstTable.getTableName(), rotator.getCurrentTableName());
+
+        // scale throughput capacity
+        UpdateTableRequest update = new UpdateTableRequest()
+                .withTableName(firstTable.getTableName())
+                .withProvisionedThroughput(new ProvisionedThroughput()
+                .withReadCapacityUnits(45l)
+                .withWriteCapacityUnits(15l));
+        dynamo.updateTable(update);
 
         // previous + current
-        rotator.rotateTables(startSeconds + maxInterval + 1);
+        rotator.rotateTables(startSeconds + maxInterval + 1, defaultReadCapacity, defaultWriteCapacity);
         tables = dynamo.listTables().getTableNames();
         assertEquals(2, tables.size());
-        assertEquals(firstTable, rotator.getPreviousTableName());
+        assertEquals(firstTable.getTableName(), rotator.getPreviousTableName());
+
+        // table created with previous table's capacity
+        TableDescription secondTable = rotator.getTable(rotator.getCurrentTableName());
+        assertNotNull(secondTable);
+        assertEquals(45l, secondTable.getProvisionedThroughput().getReadCapacityUnits().longValue());
+        assertEquals(15l, secondTable.getProvisionedThroughput().getWriteCapacityUnits().longValue());
 
         // previous + current
-        rotator.rotateTables(startSeconds + 120);
+        rotator.rotateTables(startSeconds + 120, defaultReadCapacity, defaultWriteCapacity);
         tables = dynamo.listTables().getTableNames();
         assertEquals(2, tables.size());
     }
@@ -132,7 +130,7 @@ public class DynamoTableRotatorTest {
     @Test
     public void createTable() throws Exception {
         String testTableName = "test_table_" + System.currentTimeMillis();
-        rotator.ensureTable(testTableName, 10000);
+        rotator.ensureTable(testTableName, defaultReadCapacity, defaultWriteCapacity, 10000);
         assertTrue(dynamo.listTables().getTableNames().contains(testTableName));
     }
 
@@ -140,7 +138,7 @@ public class DynamoTableRotatorTest {
     @Test
     public void ensureTableMakesWrite() throws Exception {
         String testTableName = "test_table_" + System.currentTimeMillis();
-        rotator.ensureTable(testTableName, 10000);
+        rotator.ensureTable(testTableName, defaultReadCapacity, defaultWriteCapacity, 10000);
 
         GetItemRequest request = new GetItemRequest()
                 .withTableName(testTableName)
@@ -158,7 +156,7 @@ public class DynamoTableRotatorTest {
     public void isActive() throws Exception {
         // bit of a circular test!
         String testTableName = rotator.createCurrentTableName(System.currentTimeMillis()/1000);
-        rotator.ensureTable(testTableName, 10000);
+        rotator.ensureTable(testTableName, defaultReadCapacity, defaultWriteCapacity, 10000);
         assertTrue(rotator.isActive(testTableName));
     }
 
@@ -166,7 +164,7 @@ public class DynamoTableRotatorTest {
     public void isWritable() throws Exception {
         // bit of a circular test!
         String testTableName = rotator.createCurrentTableName(System.currentTimeMillis()/1000);
-        rotator.ensureTable(testTableName, 10000);
+        rotator.ensureTable(testTableName, defaultReadCapacity, defaultWriteCapacity, 10000);
         assertTrue(rotator.isWritable(testTableName));
     }
 
@@ -177,7 +175,7 @@ public class DynamoTableRotatorTest {
         long twoTablesAgo = nowSeconds - 2*rotator.tableRotationSeconds;
 
         String oldTableName = rotator.createCurrentTableName(twoTablesAgo);
-        rotator.ensureTable(oldTableName, 10000);
+        rotator.ensureTable(oldTableName, defaultReadCapacity, defaultWriteCapacity, 10000);
 
         rotator.init(nowSeconds);
         assertEquals(oldTableName, rotator.currentTableName);
@@ -189,7 +187,7 @@ public class DynamoTableRotatorTest {
         long nowSeconds = System.currentTimeMillis()/1000;
 
         String tableName = rotator.createCurrentTableName(nowSeconds);
-        rotator.ensureTable(tableName, 10000);
+        rotator.ensureTable(tableName, defaultReadCapacity, defaultWriteCapacity, 10000);
 
         rotator.init(nowSeconds);
         assertEquals(tableName, rotator.currentTableName);

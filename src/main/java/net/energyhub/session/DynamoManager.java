@@ -51,9 +51,9 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     protected String ignoreUri = "";
     protected String ignoreHeader = "";
     protected boolean logSessionContents = false;
-    protected int requestsPerSecond = 10; // for provisioning
-    protected int sessionSize = 1; // in kB
     protected boolean eventualConsistency = false;
+    protected long defaultReadCapacity = 1;
+    protected long defaultWriteCapacity = 1;
     protected String statsdHost = "";
     protected int statsdPort = 8125;
 
@@ -149,28 +149,28 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         this.logSessionContents = logSessionContents;
     }
 
-    public int getRequestsPerSecond() {
-        return requestsPerSecond;
-    }
-
-    public void setRequestsPerSecond(int requestsPerSecond) {
-        this.requestsPerSecond = requestsPerSecond;
-    }
-
-    public int getSessionSize() {
-        return sessionSize;
-    }
-
-    public void setSessionSize(int sessionSize) {
-        this.sessionSize = sessionSize;
-    }
-
     public boolean getEventualConsistency() {
         return eventualConsistency;
     }
 
     public void setEventualConsistency(boolean eventualConsistency) {
         this.eventualConsistency = eventualConsistency;
+    }
+
+    public long getDefaultReadCapacity() {
+        return defaultReadCapacity;
+    }
+
+    public void setDefaultReadCapacity(long defaultReadCapacity) {
+        this.defaultReadCapacity = defaultReadCapacity;
+    }
+
+    public long getDefaultWriteCapacity() {
+        return defaultWriteCapacity;
+    }
+
+    public void setDefaultWriteCapacity(long defaultWriteCapacity) {
+        this.defaultWriteCapacity = defaultWriteCapacity;
     }
 
     public void setStatsdHost(String statsdHost) {
@@ -847,8 +847,8 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         long nowSeconds = System.currentTimeMillis() / 1000;
         try {
             getDynamo();
-            this.rotator = new DynamoTableRotator(getTableBaseName(), getTableRotationSeconds(), getRequestsPerSecond(),
-                    getSessionSize(), getEventualConsistency(), getDynamo());
+            this.rotator = new DynamoTableRotator(getTableBaseName(), getTableRotationSeconds(),
+                    getDefaultReadCapacity(), getDefaultWriteCapacity(), getDynamo());
             rotator.init(nowSeconds); // set current table, will wait for a table to come online if we need to create
                                       // a new one.
 
