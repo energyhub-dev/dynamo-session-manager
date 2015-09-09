@@ -84,7 +84,7 @@ public class DynamoTableRotatorTest {
 
         // just starting, create current
         assertTrue(rotator.rotationRequired(startSeconds));
-        rotator.rotateTables(startSeconds, defaultReadCapacity, defaultWriteCapacity);
+        rotator.rotateTables(startSeconds);
         tables = dynamo.listTables().getTableNames();
         assertEquals(1, tables.size());
 
@@ -96,7 +96,7 @@ public class DynamoTableRotatorTest {
         assertNull(rotator.getPreviousTableName());
 
         // just current
-        rotator.rotateTables(startSeconds + maxInterval  - 1, defaultReadCapacity, defaultWriteCapacity);
+        rotator.rotateTables(startSeconds + maxInterval  - 1);
         tables = dynamo.listTables().getTableNames();
         assertEquals(1, tables.size());
         assertEquals(firstTable.getTableName(), rotator.getCurrentTableName());
@@ -110,7 +110,7 @@ public class DynamoTableRotatorTest {
         dynamo.updateTable(update);
 
         // previous + current
-        rotator.rotateTables(startSeconds + maxInterval + 1, defaultReadCapacity, defaultWriteCapacity);
+        rotator.rotateTables(startSeconds + maxInterval + 1);
         tables = dynamo.listTables().getTableNames();
         assertEquals(2, tables.size());
         assertEquals(firstTable.getTableName(), rotator.getPreviousTableName());
@@ -122,7 +122,7 @@ public class DynamoTableRotatorTest {
         assertEquals(15l, secondTable.getProvisionedThroughput().getWriteCapacityUnits().longValue());
 
         // previous + current
-        rotator.rotateTables(startSeconds + 120, defaultReadCapacity, defaultWriteCapacity);
+        rotator.rotateTables(startSeconds + 120);
         tables = dynamo.listTables().getTableNames();
         assertEquals(2, tables.size());
     }
@@ -130,7 +130,7 @@ public class DynamoTableRotatorTest {
     @Test
     public void createTable() throws Exception {
         String testTableName = "test_table_" + System.currentTimeMillis();
-        rotator.ensureTable(testTableName, defaultReadCapacity, defaultWriteCapacity, 10000);
+        rotator.ensureTable(testTableName, 10000);
         assertTrue(dynamo.listTables().getTableNames().contains(testTableName));
     }
 
@@ -138,7 +138,7 @@ public class DynamoTableRotatorTest {
     @Test
     public void ensureTableMakesWrite() throws Exception {
         String testTableName = "test_table_" + System.currentTimeMillis();
-        rotator.ensureTable(testTableName, defaultReadCapacity, defaultWriteCapacity, 10000);
+        rotator.ensureTable(testTableName, 10000);
 
         GetItemRequest request = new GetItemRequest()
                 .withTableName(testTableName)
@@ -156,7 +156,7 @@ public class DynamoTableRotatorTest {
     public void isActive() throws Exception {
         // bit of a circular test!
         String testTableName = rotator.createCurrentTableName(System.currentTimeMillis()/1000);
-        rotator.ensureTable(testTableName, defaultReadCapacity, defaultWriteCapacity, 10000);
+        rotator.ensureTable(testTableName, 10000);
         assertTrue(rotator.isActive(testTableName));
     }
 
@@ -164,7 +164,7 @@ public class DynamoTableRotatorTest {
     public void isWritable() throws Exception {
         // bit of a circular test!
         String testTableName = rotator.createCurrentTableName(System.currentTimeMillis()/1000);
-        rotator.ensureTable(testTableName, defaultReadCapacity, defaultWriteCapacity, 10000);
+        rotator.ensureTable(testTableName, 10000);
         assertTrue(rotator.isWritable(testTableName));
     }
 
@@ -175,7 +175,7 @@ public class DynamoTableRotatorTest {
         long twoTablesAgo = nowSeconds - 2*rotator.tableRotationSeconds;
 
         String oldTableName = rotator.createCurrentTableName(twoTablesAgo);
-        rotator.ensureTable(oldTableName, defaultReadCapacity, defaultWriteCapacity, 10000);
+        rotator.ensureTable(oldTableName, 10000);
 
         rotator.init(nowSeconds);
         assertEquals(oldTableName, rotator.currentTableName);
@@ -187,7 +187,7 @@ public class DynamoTableRotatorTest {
         long nowSeconds = System.currentTimeMillis()/1000;
 
         String tableName = rotator.createCurrentTableName(nowSeconds);
-        rotator.ensureTable(tableName, defaultReadCapacity, defaultWriteCapacity, 10000);
+        rotator.ensureTable(tableName, 10000);
 
         rotator.init(nowSeconds);
         assertEquals(tableName, rotator.currentTableName);

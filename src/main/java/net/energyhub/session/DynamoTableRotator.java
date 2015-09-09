@@ -99,7 +99,7 @@ public class DynamoTableRotator {
             String tableName = createCurrentTableName(searchSeconds);
             if (isActive(tableName)) {
                 // Triple-check the table works before using it
-                ensureTable(tableName, defaultReadCapacity, defaultWriteCapacity, DynamoTableRotator.CREATE_TABLE_HEADROOM_SECONDS*2000);
+                ensureTable(tableName, DynamoTableRotator.CREATE_TABLE_HEADROOM_SECONDS*2000);
                 synchronized (this) {
                     currentTableName = tableName;
                 }
@@ -111,7 +111,7 @@ public class DynamoTableRotator {
         log.warning("No active tables found, will wait for the current one to come up and use that.");
         String firstTable = createCurrentTableName(nowSeconds);
         // If first table does not exist, go back and look for a previous table
-        ensureTable(firstTable, defaultReadCapacity, defaultWriteCapacity, DynamoTableRotator.CREATE_TABLE_HEADROOM_SECONDS * 2000);
+        ensureTable(firstTable, DynamoTableRotator.CREATE_TABLE_HEADROOM_SECONDS * 2000);
         synchronized (this) {
             currentTableName = firstTable;
         }
@@ -141,12 +141,12 @@ public class DynamoTableRotator {
             long nowSeconds = System.currentTimeMillis()/1000;
             if (createTableRequired(nowSeconds)) {
                 log.info("Need to create next table");
-                createTable(createNextTableName(nowSeconds), defaultReadCapacity, defaultWriteCapacity);
+                createTable(createNextTableName(nowSeconds));
             }
 
             if (rotationRequired(nowSeconds)) {
                 log.info("Table rotation *is* required");
-                rotateTables(nowSeconds, defaultReadCapacity, defaultWriteCapacity);
+                rotateTables(nowSeconds);
             }
 
         } finally {
@@ -183,16 +183,14 @@ public class DynamoTableRotator {
         return false;
     }
 
-    protected void createTable(String tableName, long readCapacity, long writeCapacity) {
-        log.info("Creating table " + tableName + " with initial throughput capacity [read: " + readCapacity + ", write: " + writeCapacity + "]");
+    protected void createTable(String tableName) {
+        ProvisionedThroughput throughput = createProvisionedThroughput();
+        log.info("Creating table " + tableName + " with initial throughput capacity [read: " + throughput.getReadCapacityUnits() +
+                ", write: " + throughput.getWriteCapacityUnits() + "]");
         // define schema: primary string index on id
         KeySchemaElement primary = new KeySchemaElement().withAttributeName(DynamoManager.COLUMN_ID).withAttributeType(ScalarAttributeType.S);
         KeySchema schema = new KeySchema()
                 .withHashKeyElement(primary);
-
-        ProvisionedThroughput throughput = new ProvisionedThroughput()
-                .withReadCapacityUnits(readCapacity)
-                .withWriteCapacityUnits(writeCapacity);
 
         CreateTableRequest createRequest = new CreateTableRequest(tableName, schema)
                 .withProvisionedThroughput(throughput);
@@ -202,10 +200,10 @@ public class DynamoTableRotator {
         // AmazonServiceException for creating existing table
     }
 
-    protected void ensureTable(String tableName, long readCapacity, long writeCapacity, long timeoutMillis) throws InterruptedException {
+    protected void ensureTable(String tableName, long timeoutMillis) throws InterruptedException {
         List<String> tableNames = dynamo.listTables().getTableNames();
         if (!tableNames.contains(tableName)) {
-            createTable(tableName, readCapacity, writeCapacity);
+            createTable(tableName);
         }
         waitForTable(tableName, timeoutMillis);
     }
@@ -327,30 +325,15 @@ public class DynamoTableRotator {
      * and provision the outgoing active table as read-only to save money.
      * @param nowSeconds
      */
-    protected void rotateTables(long nowSeconds, long defaultReadCapacity, long defaultWriteCapacity) {
+    protected void rotateTables(long nowSeconds) {
         // Get some temp variables of what the current table *should* be called, but don't set the member field yet
         // until we know that the table actually exists
         String targetCurrentTableName = createCurrentTableName(nowSeconds);
         String targetPreviousTableName = currentTableName;
 
-        long readCapacity = defaultReadCapacity;
-        long writeCapacity = defaultWriteCapacity;
-        TableDescription targetPreviousTable = getTable(targetPreviousTableName);
-        if (targetPreviousTable != null) {
-            ProvisionedThroughputDescription previousThroughput = targetPreviousTable.getProvisionedThroughput();
-            if (previousThroughput != null) {
-                if (previousThroughput.getReadCapacityUnits() != null) {
-                    readCapacity = previousThroughput.getReadCapacityUnits();
-                }
-                if (previousThroughput.getWriteCapacityUnits() != null) {
-                    writeCapacity = previousThroughput.getWriteCapacityUnits();
-                }
-            }
-        }
-
         // Make sure the table we want to make active exists
         try {
-            ensureTable(targetCurrentTableName, readCapacity, writeCapacity, CREATE_TABLE_HEADROOM_SECONDS*2000);
+            ensureTable(targetCurrentTableName, CREATE_TABLE_HEADROOM_SECONDS*2000);
         } catch (Exception e) {
             log.severe("Failed to create table" + e);
             return;
@@ -411,6 +394,30 @@ public class DynamoTableRotator {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Use read/write throughput capacity from current table if available,
+     * otherwise fall back to defaults.
+     */
+    protected ProvisionedThroughput createProvisionedThroughput() {
+        long readCapacity = defaultReadCapacity;
+        long writeCapacity = defaultWriteCapacity;
+        TableDescription currentTable = getTable(currentTableName);
+        if (currentTable != null) {
+            ProvisionedThroughputDescription throughput = currentTable.getProvisionedThroughput();
+            if (throughput != null) {
+                if (throughput.getReadCapacityUnits() != null) {
+                    readCapacity = throughput.getReadCapacityUnits();
+                }
+                if (throughput.getWriteCapacityUnits() != null) {
+                    writeCapacity = throughput.getWriteCapacityUnits();
+                }
+            }
+        }
+        return new ProvisionedThroughput()
+                .withReadCapacityUnits(readCapacity)
+                .withWriteCapacityUnits(writeCapacity);
     }
 
     /**
