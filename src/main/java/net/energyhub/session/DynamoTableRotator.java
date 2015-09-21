@@ -77,7 +77,8 @@ public class DynamoTableRotator {
     }
 
     public synchronized String getCurrentTableName() {
-        return this.currentTableName;
+        return "tomcat-sessions-prod_20150920_000000";
+//        return this.currentTableName;
     }
 
     public synchronized String getPreviousTableName() {
@@ -91,30 +92,30 @@ public class DynamoTableRotator {
      * @param nowSeconds
      */
     public void init(long nowSeconds) throws InterruptedException {
-        log.info("Initializing current table");
-
-        for (int i=0; i<10; i++) {
-            log.info("Searching for table from " + i*tableRotationSeconds + " seconds ago");
-            long searchSeconds = nowSeconds - i*tableRotationSeconds;
-            String tableName = createCurrentTableName(searchSeconds);
-            if (isActive(tableName)) {
-                // Triple-check the table works before using it
-                ensureTable(tableName, DynamoTableRotator.CREATE_TABLE_HEADROOM_SECONDS*2000);
-                synchronized (this) {
-                    currentTableName = tableName;
-                }
-                log.info("Found and used active table " + tableName + " from " + i + " periods ago");
-                return;
-            }
-        }
-        // Hmmm, none found? Let's
-        log.warning("No active tables found, will wait for the current one to come up and use that.");
-        String firstTable = createCurrentTableName(nowSeconds);
-        // If first table does not exist, go back and look for a previous table
-        ensureTable(firstTable, DynamoTableRotator.CREATE_TABLE_HEADROOM_SECONDS * 2000);
-        synchronized (this) {
-            currentTableName = firstTable;
-        }
+//        log.info("Initializing current table");
+//
+//        for (int i=0; i<10; i++) {
+//            log.info("Searching for table from " + i*tableRotationSeconds + " seconds ago");
+//            long searchSeconds = nowSeconds - i*tableRotationSeconds;
+//            String tableName = createCurrentTableName(searchSeconds);
+//            if (isActive(tableName)) {
+//                // Triple-check the table works before using it
+//                ensureTable(tableName, DynamoTableRotator.CREATE_TABLE_HEADROOM_SECONDS*2000);
+//                synchronized (this) {
+//                    currentTableName = tableName;
+//                }
+//                log.info("Found and used active table " + tableName + " from " + i + " periods ago");
+//                return;
+//            }
+//        }
+//        // Hmmm, none found? Let's
+//        log.warning("No active tables found, will wait for the current one to come up and use that.");
+//        String firstTable = createCurrentTableName(nowSeconds);
+//        // If first table does not exist, go back and look for a previous table
+//        ensureTable(firstTable, DynamoTableRotator.CREATE_TABLE_HEADROOM_SECONDS * 2000);
+//        synchronized (this) {
+//            currentTableName = firstTable;
+//        }
     }
 
     /**
@@ -166,20 +167,21 @@ public class DynamoTableRotator {
      * Look at existing tables to see if we need to pre-create the next new (future) table.
      */
     protected boolean createTableRequired(long nowSeconds) {
-        long timeOfNextTable = nowSeconds + tableRotationSeconds - nowSeconds % tableRotationSeconds;
-        if (timeOfNextTable >= nowSeconds + CREATE_TABLE_HEADROOM_SECONDS) {
-            log.finer(timeOfNextTable-nowSeconds + " seconds until next table required, not doing it yet.");
-            return false;
-        }
-
-        Set<String> tableNames = new HashSet<String>(dynamo.listTables().getTableNames());
-        String nextTableName = createNextTableName(nowSeconds);
-        if (!tableNames.contains(nextTableName)) {
-            log.info(timeOfNextTable-nowSeconds + " seconds until next table required, we should create it.");
-            return true;
-        } else {
-            log.finer("Next table is due but it already exists, not creating it");
-        }
+//
+//        long timeOfNextTable = nowSeconds + tableRotationSeconds - nowSeconds % tableRotationSeconds;
+//        if (timeOfNextTable >= nowSeconds + CREATE_TABLE_HEADROOM_SECONDS) {
+//            log.finer(timeOfNextTable-nowSeconds + " seconds until next table required, not doing it yet.");
+//            return false;
+//        }
+//
+//        Set<String> tableNames = new HashSet<String>(dynamo.listTables().getTableNames());
+//        String nextTableName = createNextTableName(nowSeconds);
+//        if (!tableNames.contains(nextTableName)) {
+//            log.info(timeOfNextTable-nowSeconds + " seconds until next table required, we should create it.");
+//            return true;
+//        } else {
+//            log.finer("Next table is due but it already exists, not creating it");
+//        }
         return false;
     }
 
@@ -201,11 +203,11 @@ public class DynamoTableRotator {
     }
 
     protected void ensureTable(String tableName, long timeoutMillis) throws InterruptedException {
-        List<String> tableNames = dynamo.listTables().getTableNames();
-        if (!tableNames.contains(tableName)) {
-            createTable(tableName);
-        }
-        waitForTable(tableName, timeoutMillis);
+//        List<String> tableNames = dynamo.listTables().getTableNames();
+//        if (!tableNames.contains(tableName)) {
+//            createTable(tableName);
+//        }
+//        waitForTable(tableName, timeoutMillis);
     }
 
     protected void waitForTable(String tableName, long timeoutMillis) throws InterruptedException {
@@ -347,8 +349,8 @@ public class DynamoTableRotator {
             previousTableName = targetPreviousTableName;
         }
 
-        List<String> tableNames = dynamo.listTables().getTableNames();
-        removeExpiredTables(tableNames, nowSeconds);
+//        List<String> tableNames = dynamo.listTables().getTableNames();
+//        removeExpiredTables(tableNames, nowSeconds);
     }
 
     /**
