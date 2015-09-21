@@ -68,7 +68,7 @@ public class DynamoTableRotator {
     public DynamoTableRotator(String tableBaseName, Integer tableRotationSeconds, long defaultReadCapacity,
                               long defaultWriteCapacity, AmazonDynamoDB dynamo, String override) {
         this.override = override;
-        log.info("Initializing rotator");
+        log.info("Initializing rotator -- override: " + override);
         this.tableBaseName = tableBaseName;
         this.tableRotationSeconds = tableRotationSeconds;
         this.defaultReadCapacity = defaultReadCapacity;
