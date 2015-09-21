@@ -56,6 +56,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     protected long defaultWriteCapacity = 1;
     protected String statsdHost = "";
     protected int statsdPort = 8125;
+    private String override;
 
     public static final String COLUMN_ID = "id";
     public static final String COLUMN_LAST_ACCESSED = "lastAccessed";
@@ -179,6 +180,8 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
     public String getStatsdHost() {
         return statsdHost;
     }
+
+    public void setOverride(String override) { this.override = override;}
 
     public void setStatsdPort(int statsdPort) {
         this.statsdPort = statsdPort;
@@ -848,9 +851,9 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         try {
             getDynamo();
             this.rotator = new DynamoTableRotator(getTableBaseName(), getTableRotationSeconds(),
-                    getDefaultReadCapacity(), getDefaultWriteCapacity(), getDynamo());
+                    getDefaultReadCapacity(), getDefaultWriteCapacity(), getDynamo(), getOverride());
             rotator.init(nowSeconds); // set current table, will wait for a table to come online if we need to create
-                                      // a new one.
+            // a new one.
 
             log.info("Connected to Dynamo for session storage. Session live time = "
                     + (getMaxInactiveInterval()) + "s");
@@ -911,4 +914,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         }
     }
 
+    public String getOverride() {
+        return override;
+    }
 }
