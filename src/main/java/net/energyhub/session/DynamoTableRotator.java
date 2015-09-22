@@ -361,18 +361,18 @@ public class DynamoTableRotator {
                 nextTableName));
         for (String tableName : tableNames) {
             if (isMyTable(tableName) && !tablesToKeep.contains(tableName)) {
-                try {
-                    log.info("Deleting expired table: " + tableName);
-                    DeleteTableRequest dtr = new DeleteTableRequest().withTableName(tableName);
-                    dynamo.deleteTable(dtr);
-                } catch (ResourceInUseException e) {
-                    log.info("Table is already being deleted by another server/thread.");
-                } catch (ResourceNotFoundException e) {
-                    log.info("Table has already been deleted by another server/thread.");
-                } catch (Exception e) {
-                    log.severe("Failed to delete expired table " + tableName);
-                    log.severe(e.toString());
-                }
+//                try {
+//                    log.info("Deleting expired table: " + tableName);
+//                    DeleteTableRequest dtr = new DeleteTableRequest().withTableName(tableName);
+//                    dynamo.deleteTable(dtr);
+//                } catch (ResourceInUseException e) {
+//                    log.info("Table is already being deleted by another server/thread.");
+//                } catch (ResourceNotFoundException e) {
+//                    log.info("Table has already been deleted by another server/thread.");
+//                } catch (Exception e) {
+//                    log.severe("Failed to delete expired table " + tableName);
+//                    log.severe(e.toString());
+//                }
             }
         }
     }
