@@ -44,79 +44,79 @@ public class DynamoManagerTest {
         this.manager.stop();
         db.stop();
     }
-//
-//    @Test
-//    public void testSaveLoad() throws Exception {
-//        Session session = this.manager.createSession(null);
-//        log.info("Created session:" + session.getId() + "; access = " + session.getLastAccessedTime());
-//
-//        this.manager.save((DynamoSession)session);
-//        log.info("Saved session:" + session.getId() + "; access = " + session.getLastAccessedTime());
-//        String id = session.getId();
-//
-//        Thread.sleep(1000l);
-//
-//        session = this.manager.loadSession(id);
-//        log.info("Loaded session:" + session.getId() + "; access = " + session.getLastAccessedTime());
-//        // verify that loaded session still has the last accessed time we expect
-//        assertEquals(id, session.getId());
-//        long lastAccessed = session.getLastAccessedTime();
-//
-//        // Now save again and verify that the last accessed time has changed
-//        this.manager.save((DynamoSession)session);
-//        log.info("Saved session (again):" + session.getId());
-//        session = this.manager.loadSession(id);
-//        log.info("Loaded session (again):" + session.getId() + "; access = " + session.getLastAccessedTime());
-//        assertEquals(id, session.getId());
-//        log.info("Old access time: " + lastAccessed + ";  current access time: " + session.getLastAccessedTime());
-//        assertTrue(lastAccessed < session.getLastAccessedTime()); // should be 10ms apart
-//
-//    }
-//
-//    @Test
-//    public void testHaveAttributesChanged() throws Exception {
-//        Map<String, Object> originalAttributes = new HashMap();
-//        originalAttributes.put("FOO", "BAR");
-//        originalAttributes.put("FOO2", "BAR2");
-//
-//        // start off with a session with the same attributes
-//        StandardSession session = setUpSession(originalAttributes);
-//        // modify the session attributes
-//        session.getSession().setAttribute("FOO", "BAZ");
-//        // attribute has changed
-//        assertTrue(this.manager.haveAttributesChanged((DynamoSession)session));
-//
-//        // Get another instance of session and add new attribute
-//        session = setUpSession(originalAttributes);
-//        session.getSession().setAttribute("FOO3", "QUX");
-//        // attributes have changed
-//        assertTrue(this.manager.haveAttributesChanged((DynamoSession)session));
-//
-//        // Get another instance of session and remove attribute
-//        session = setUpSession(originalAttributes);
-//        session.getSession().removeAttribute("FOO2");
-//        // attributes have changed
-//        assertTrue(this.manager.haveAttributesChanged((DynamoSession)session));
-//
-//        // Get a new instance of this session and do not modify it
-//        session = setUpSession(originalAttributes);
-//        // attribute has not changed
-//        assertFalse(this.manager.haveAttributesChanged((DynamoSession)session));
-//
-//        // Get a new instance of this session and set the same attrib
-//        session = setUpSession(originalAttributes);
-//        session.getSession().setAttribute("FOO", "BAR");
-//        // attribute has not changed
-//        assertFalse(this.manager.haveAttributesChanged((DynamoSession)session));
-//    }
-//
-//
-//    protected StandardSession setUpSession(Map<String, Object> attributes) {
-//        StandardSession originalSession = (StandardSession) this.manager.createSession(null);
-//        for (Map.Entry<String, Object> entry : attributes.entrySet()) {
-//            originalSession.getSession().setAttribute(entry.getKey(), entry.getValue());
-//        }
-//        this.manager.setCurrentSession((DynamoSession)originalSession);
-//        return originalSession;
-//    }
+
+    @Test
+    public void testSaveLoad() throws Exception {
+        Session session = this.manager.createSession(null);
+        log.info("Created session:" + session.getId() + "; access = " + session.getLastAccessedTime());
+
+        this.manager.save((DynamoSession)session);
+        log.info("Saved session:" + session.getId() + "; access = " + session.getLastAccessedTime());
+        String id = session.getId();
+
+        Thread.sleep(1000l);
+
+        session = this.manager.loadSession(id);
+        log.info("Loaded session:" + session.getId() + "; access = " + session.getLastAccessedTime());
+        // verify that loaded session still has the last accessed time we expect
+        assertEquals(id, session.getId());
+        long lastAccessed = session.getLastAccessedTime();
+
+        // Now save again and verify that the last accessed time has changed
+        this.manager.save((DynamoSession)session);
+        log.info("Saved session (again):" + session.getId());
+        session = this.manager.loadSession(id);
+        log.info("Loaded session (again):" + session.getId() + "; access = " + session.getLastAccessedTime());
+        assertEquals(id, session.getId());
+        log.info("Old access time: " + lastAccessed + ";  current access time: " + session.getLastAccessedTime());
+        assertTrue(lastAccessed < session.getLastAccessedTime()); // should be 10ms apart
+
+    }
+
+    @Test
+    public void testHaveAttributesChanged() throws Exception {
+        Map<String, Object> originalAttributes = new HashMap();
+        originalAttributes.put("FOO", "BAR");
+        originalAttributes.put("FOO2", "BAR2");
+
+        // start off with a session with the same attributes
+        StandardSession session = setUpSession(originalAttributes);
+        // modify the session attributes
+        session.getSession().setAttribute("FOO", "BAZ");
+        // attribute has changed
+        assertTrue(this.manager.haveAttributesChanged((DynamoSession)session));
+
+        // Get another instance of session and add new attribute
+        session = setUpSession(originalAttributes);
+        session.getSession().setAttribute("FOO3", "QUX");
+        // attributes have changed
+        assertTrue(this.manager.haveAttributesChanged((DynamoSession)session));
+
+        // Get another instance of session and remove attribute
+        session = setUpSession(originalAttributes);
+        session.getSession().removeAttribute("FOO2");
+        // attributes have changed
+        assertTrue(this.manager.haveAttributesChanged((DynamoSession)session));
+
+        // Get a new instance of this session and do not modify it
+        session = setUpSession(originalAttributes);
+        // attribute has not changed
+        assertFalse(this.manager.haveAttributesChanged((DynamoSession)session));
+
+        // Get a new instance of this session and set the same attrib
+        session = setUpSession(originalAttributes);
+        session.getSession().setAttribute("FOO", "BAR");
+        // attribute has not changed
+        assertFalse(this.manager.haveAttributesChanged((DynamoSession)session));
+    }
+
+
+    protected StandardSession setUpSession(Map<String, Object> attributes) {
+        StandardSession originalSession = (StandardSession) this.manager.createSession(null);
+        for (Map.Entry<String, Object> entry : attributes.entrySet()) {
+            originalSession.getSession().setAttribute(entry.getKey(), entry.getValue());
+        }
+        this.manager.setCurrentSession((DynamoSession)originalSession);
+        return originalSession;
+    }
 }
