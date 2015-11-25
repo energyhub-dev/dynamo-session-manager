@@ -828,13 +828,11 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         if (this.dynamo != null) {
             return this.dynamo;
         }
-        if (awsAccessKey.isEmpty() && dynamoEndpoint.isEmpty()) {
-            log.severe("No connection properties specified for Dynamo");
-            // FIXME try to connect anyway
-            return null;
+        if (!awsAccessKey.isEmpty() && !dynamoEndpoint.isEmpty()) {
+            this.dynamo = new AmazonDynamoDBClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey));
+        } else {
+            this.dynamo = new AmazonDynamoDBClient(); // try to use instance credentials
         }
-        this.dynamo = new AmazonDynamoDBClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey));
-        log.info("Connecting to Dynamo with accessKey: " + awsAccessKey);
         if (!dynamoEndpoint.isEmpty()) {
             // Using some sort of mock connection for QA/testing (see ddbmock or Alternator)
             log.info("Setting dynamo endpoint: " + dynamoEndpoint);
