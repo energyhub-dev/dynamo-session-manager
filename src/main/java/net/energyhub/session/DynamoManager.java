@@ -828,7 +828,7 @@ public class DynamoManager implements Manager, Lifecycle, PropertyChangeListener
         if (this.dynamo != null) {
             return this.dynamo;
         }
-        if (!awsAccessKey.isEmpty() && !dynamoEndpoint.isEmpty()) {
+        if (!awsAccessKey.isEmpty() && !awsSecretKey.isEmpty()) {
             this.dynamo = new AmazonDynamoDBClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey));
         } else {
             this.dynamo = new AmazonDynamoDBClient(); // try to use instance credentials
